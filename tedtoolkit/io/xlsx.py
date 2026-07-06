@@ -74,30 +74,35 @@ def xlsx_export(data_in, **kwargs):
         if path[-5:] != '.xlsx':
             path = path + '.xlsx'
         _add_kwarg_to_last_command('file_path', _quoted(path), fn_name='xlsx_export')
-    kwargs['wb_filter'] = _kwarg_parse_prompt_bool('wb_filter', default_val='True', prompt='Include data filter?', **kwargs)
-    wb_filter = kwargs['wb_filter']
-    kwargs['view_in_excel'] = _kwarg_parse_prompt_bool('view_in_excel', default_val='True', prompt='Open in Excel?', **kwargs)
+    wb_filter = _kwarg_parse_prompt_bool('wb_filter', default_val='True', prompt='Include data filter?', **kwargs)
+    view_in_excel = _kwarg_parse_prompt_bool('view_in_excel', default_val='True', prompt='Open in Excel?', **kwargs)
+    return _xlsx_export_core(data_in, path, wb_filter, view_in_excel)
+
+
+def _xlsx_export_core(data_dict, file_path, wb_filter, view_in_excel):
+    '''Pure xlsx-writing logic (no GUI, no prompting). data_dict must already be
+    {sheet_name: list-of-lists}; file_path/wb_filter/view_in_excel already resolved.'''
     wbk = openpyxl.Workbook(write_only=not wb_filter)
     existing_sheets = [name for name in wbk.sheetnames] #should be none is not using filter
-    for index, sheetname in enumerate(data_in):
+    for index, sheetname in enumerate(data_dict):
         wst = wbk.create_sheet(sheetname)
         print('Exporting sheet {}...'.format(sheetname[:31]))
-        with click.progressbar(data_in[sheetname],
+        with click.progressbar(data_dict[sheetname],
             fill_char='>', empty_char='-') as data:
             for line in data:
                 wst.append(line)
         if wb_filter:
             wst.auto_filter.ref = wst.dimensions
-    if existing_sheets and not any([sheet in data_in for sheet in existing_sheets]):
+    if existing_sheets and not any([sheet in data_dict for sheet in existing_sheets]):
         for sheet in existing_sheets:
             sheet_obj = wbk[sheet]
             wbk.remove(sheet_obj)
     print('Data prepared. Saving...')
-    wbk.save(path)
-    print('\nWorkbook saved under {}\n\n'.format(path))
-    if kwargs.get('view_in_excel', False):
+    wbk.save(file_path)
+    print('\nWorkbook saved under {}\n\n'.format(file_path))
+    if view_in_excel:
         excel = win32com.client.dynamic.Dispatch('excel.application')
-        _ = excel.Workbooks.Open(path)
+        _ = excel.Workbooks.Open(file_path)
         excel.Visible = True
     return
 
@@ -114,17 +119,22 @@ def xlsx_import(**kwargs):
     override_ro: overrides the (default behavior) read only
         feature; needed in some cases to fix bugs in library'''
     path = kwargs.get('file_path', None)
-    ro = not kwargs.get('override_ro', False)
     if path is None:
         path = g_sel_file(title='Open XLSX (Python)',
                           filetypes=[('XLSX', ('*.xlsx'))])
     if not path:
         return None
-    include_formulas = kwargs.get('include_formulas', False)
+    return _xlsx_import_core(path, kwargs.get('include_formulas', False),
+                             kwargs.get('override_ro', False))
+
+
+def _xlsx_import_core(file_path, include_formulas, override_ro):
+    '''Pure xlsx-reading logic (no GUI, no prompting). file_path already resolved.'''
+    ro = not override_ro
     fn = lambda line: [item.value for item in line]
-    data_in = openpyxl.load_workbook(path, read_only=ro,
+    data_in = openpyxl.load_workbook(file_path, read_only=ro,
         data_only=(not include_formulas))
-    print('Reading workbook at path: {}'.format(path))
+    print('Reading workbook at path: {}'.format(file_path))
     ret_dict = collections.OrderedDict()
     for sheet_name in data_in.sheetnames:
         print('Importing sheet {}...'.format(sheet_name))

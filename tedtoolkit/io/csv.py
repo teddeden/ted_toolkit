@@ -92,16 +92,16 @@ def csv_export(data, **kwargs):
         string format to be used to convert datetime objects;
         if True, date_format should be specified.'''
     kwargs = _parse_csv_args('export', **kwargs)
-    file_path = kwargs['file_path']
-    delim = kwargs['delim']
-    quoting = kwargs['quoting']
-    quote_mark = kwargs['quote_mark']
-    encoding = kwargs['encoding']
-    line_terminator = kwargs['line_terminator']
-    convert_dates = kwargs['convert_dates']
-    date_format = kwargs['date_format']
     if not _is_list_of_lists(data):
         raise Exception('Export CSV Failed: No content')
+    return _csv_export_core(data, kwargs['file_path'], kwargs['delim'], kwargs['quote_mark'],
+                            kwargs['encoding'], kwargs['line_terminator'], kwargs['quoting'],
+                            kwargs['convert_dates'], kwargs['date_format'])
+
+
+def _csv_export_core(data, file_path, delim, quote_mark, encoding, line_terminator, quoting,
+                     convert_dates, date_format):
+    '''Pure CSV-writing logic (no GUI, no prompting). All args already resolved.'''
     print('Writing CSV...\n')
     with open(file_path, 'w', encoding=encoding) as file_out:
         o_writer = \
@@ -182,20 +182,20 @@ def csv_import(**kwargs):
     quoting, (default = 'QUOTE_MINIMAL')
     '''
     kwargs = _parse_csv_args('import', **kwargs)
-    file_path = kwargs['file_path']
-    delim = kwargs['delim']
-    quoting = kwargs['quoting']
-    quote_mark = kwargs['quote_mark']
-    encoding = kwargs['encoding']
-    line_terminator = kwargs['line_terminator']
-    convert_numbers = kwargs['convert_numbers']
-    convert_dates = kwargs['convert_dates']
-    date_format = kwargs['date_format']
-    print('Reading CSV file at location {}'.format(file_path))
-    print('Converting numbers.' if convert_numbers else
+    print('Reading CSV file at location {}'.format(kwargs['file_path']))
+    print('Converting numbers.' if kwargs['convert_numbers'] else
           'NOT converting numbers.')
-    print('Converting dates.' if convert_dates else
+    print('Converting dates.' if kwargs['convert_dates'] else
           'NOT converting dates.')
+    return _csv_import_core(kwargs['file_path'], kwargs['delim'], kwargs['quote_mark'],
+                            kwargs['encoding'], kwargs['line_terminator'], kwargs['quoting'],
+                            kwargs['convert_numbers'], kwargs['convert_dates'],
+                            kwargs['date_format'])
+
+
+def _csv_import_core(file_path, delim, quote_mark, encoding, line_terminator, quoting,
+                     convert_numbers, convert_dates, date_format):
+    '''Pure CSV-reading logic (no GUI, no prompting). All args already resolved.'''
     ret_table = []
     with open(file_path, 'r', encoding=encoding) as file_in:
         csv_reader = csv.reader(file_in, delimiter=delim,
