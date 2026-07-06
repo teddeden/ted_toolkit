@@ -6,7 +6,7 @@ from tedtoolkit.history import _check_assignment, _add_kwarg_to_last_command, _q
 from tedtoolkit.validation import _check_var_table, _is_list_of_lists
 from tedtoolkit.prompts import ask_select, ask_select_column_index, _kwarg_parse_prompt_bool, _kwarg_parse_prompt_str
 from tedtoolkit.util import beep
-from tedtoolkit.tables.columns import sel_col, _decimate
+from tedtoolkit.tables.columns import _decimate
 from tedtoolkit.tables.reconcile import key_analysis
 
 
@@ -87,10 +87,47 @@ def data_join(base_table, ext_table, **kwargs):
                                                                  prompt=_prompt, **kwargs)
     ext_hdr_tag = '' if not headers else _kwarg_parse_prompt_str('ext_hdr_tag', '_JOINED_',
                                                                 prompt=_prompt, **kwargs)
-    base_keys = sel_col(base_table, base_key_col, headers)
-    ext_keys = sel_col(ext_table, ext_key_col, headers)
+    suppress_key_table_return = kwargs.get('suppress_key_table_return', False)
+    no_match_text = kwargs.get('no_match_text', '-no match-')
+    ambiguous_text = kwargs.get('ambiguous_text', '-ambiguous-')
+    join_error_text = kwargs.get('join_error_text', '-join error-')
+
+    if join_type == 'base':
+        unm_prompt = 'Currently making table of unmatched records from joined: < {1} >. OK?'
+        incl_unm = _kwarg_parse_prompt_bool('include_unmatched_ext_in_ret_val', default_val='True',
+                                           prompt=unm_prompt, **kwargs)
+    else:
+        incl_unm = False
+    unm_name = None
+    if incl_unm:
+        _prompt = 'Current sheet name for unmatched report (var <{}>) is <{}>. Is that ok?'
+        unm_name = _kwarg_parse_prompt_str('unmatched_ext_sheet_name', 'unmatched', prompt=_prompt,
+                                          **kwargs)
+
+    ret_dict = _data_join_core(base_table, ext_table, join_type, base_key_col, ext_key_col,
+                               neg_list, neg_key_col, headers, base_hdr_tag, ext_hdr_tag,
+                               suppress_key_table_return, no_match_text, ambiguous_text,
+                               join_error_text, incl_unm, unm_name)
+    print('\nJOIN: Done. Saved to variable {}'.format(ass_var))
+    beep()
+    return ret_dict
+data_join.desc = 'Prompted list of lists join'
+
+
+def _data_join_core(base_table, ext_table, join_type, base_key_col, ext_key_col, neg_list,
+                    neg_key_col, headers, base_hdr_tag, ext_hdr_tag, suppress_key_table_return,
+                    no_match_text, ambiguous_text, join_error_text,
+                    include_unmatched_ext_in_ret_val, unmatched_ext_sheet_name):
+    '''Pure join logic (no prompting/history side effects). Takes every value the
+    interactive wrapper would otherwise have prompted for, already resolved.
+    (Extracts key columns inline rather than via sel_col()/extract_column_from_table(),
+    since those call _check_assignment() as a side effect - not appropriate from a pure core.)'''
+    def _col(table, col, has_headers):
+        return [line[col] for line in (table[1:] if has_headers else table)]
+    base_keys = _col(base_table, base_key_col, headers)
+    ext_keys = _col(ext_table, ext_key_col, headers)
     if neg_list:
-        neg_keys = sel_col(neg_list, neg_key_col, headers)
+        neg_keys = _col(neg_list, neg_key_col, headers)
     else:
         neg_keys = []
 
@@ -116,7 +153,7 @@ def data_join(base_table, ext_table, **kwargs):
 
     ret_dict = collections.OrderedDict()
     ret_dict['joined'] = []
-    if not kwargs.get('suppress_key_table_return', False):
+    if not suppress_key_table_return:
         ret_dict['all_keys'] = [['Key Analysis Result', 'Key']]
         for key_cat in key_dict:
             for key in key_dict[key_cat]:
@@ -124,9 +161,6 @@ def data_join(base_table, ext_table, **kwargs):
                     continue
                 ret_dict['all_keys'].append([key_cat, key])
 
-    no_match_text = kwargs.get('no_match_text', '-no match-')
-    ambiguous_text = kwargs.get('ambiguous_text', '-ambiguous-')
-    join_error_text = kwargs.get('join_error_text', '-join error-')
     base_blank = [no_match_text] * len(base_table[0])
     ext_blank = [no_match_text] * len(ext_table[0])
     base_ambig = [ambiguous_text] * len(base_table[0])
@@ -199,26 +233,14 @@ def data_join(base_table, ext_table, **kwargs):
                 line.insert(2,\
                     'Yes' if line[0] in explained else 'No' if line[0] in unexplained else 'n/a')
 
-    if join_type == 'base':
-        unm_prompt = 'Currently making table of unmatched records from joined: < {1} >. OK?'
-        incl_unm = _kwarg_parse_prompt_bool('include_unmatched_ext_in_ret_val', default_val='True',
-                                           prompt=unm_prompt, **kwargs)
-    else:
-        incl_unm = False
-    if incl_unm:
+    if include_unmatched_ext_in_ret_val:
         print('\nJOIN: Creating table of unused external table records')
         unmatched = key_dict['C'] + key_dict['E'] + key_dict['F'] + key_dict['H']
-        _prompt = 'Current sheet name for unmatched report (var <{}>) is <{}>. Is that ok?'
-        unm_name = _kwarg_parse_prompt_str('unmatched_ext_sheet_name', 'unmatched', prompt=_prompt,
-                                          **kwargs)
-        ret_dict[unm_name] = [line for index, line in enumerate(ext_table)\
+        ret_dict[unmatched_ext_sheet_name] = [line for index, line in enumerate(ext_table)\
                               if (index == 0 and headers) or line[ext_key_col] in unmatched]
         print(' ...number of unmatched records: {}'.format(str(len(unmatched))))
         if len(unmatched) == 0:
-            ret_dict[unm_name].append(['no unmatched records found in joined table'])
+            ret_dict[unmatched_ext_sheet_name].append(['no unmatched records found in joined table'])
 
     ret_dict['joined'] = joined
-    print('\nJOIN: Done. Saved to variable {}'.format(ass_var))
-    beep()
     return ret_dict
-data_join.desc = 'Prompted list of lists join'
