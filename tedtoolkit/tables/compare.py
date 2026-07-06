@@ -160,7 +160,7 @@ def compare_columns(table, **kwargs):
         data = table
     if len(data) < (2 if header_row else 1):
         raise Exception(f'compare_column() CRITICAL ERROR: table has insufficient content (table length {len(data)})')
-    if len(set([len(row) for row in data])) > 1:
+    if len({len(row) for row in data}) > 1:
         raise Exception('compare_columns() CRITICAL ERROR: table data rows have different lengths. Aborting.')
     column_select_mode = _kwarg_parse_prompt_list('column_select_mode', ['name', 'index'], **kwargs)
     if column_select_mode not in ['name', 'index']:
@@ -261,7 +261,7 @@ def compare_columns(table, **kwargs):
     new_col_name = _kwarg_parse_prompt_str('new_col_name', default_val=f'COMPARE: {data[0][cols[0]]} | {data[0][cols[1]]}', prompt='{} (Text to use as new column header name.) is < {} >. OK?', min_len=1, max_len=None, **kwargs)
 
     # Check on table size before continuing, log width
-    row_lengths = set([len(row) for row in data])
+    row_lengths = {len(row) for row in data}
     if len(row_lengths) > 1:
         g_conditional_stop(f'Unequal row lengths detected: {sorted(list(row_lengths))}',
                            title='compare_columns(): UNABLE TO PROCEED due to INCONSISTENT ROW LENGTHS.',
@@ -316,7 +316,7 @@ def _compare_columns_core(data, cols, compare_type, header_row=True,
                 continue
             data_points = [row[col] for col in cols]
             if compare_type == 'text':
-                if not all([(isinstance(point, str) or point is None) for point in data_points]):
+                if not all((isinstance(point, str) or point is None) for point in data_points):
                     if fail_detail:
                         row.append(f'{error_text}: Non-string data: {str(data_points[0])} ({type(data_points[0])}) -> {str(data_points[1])} ({type(data_points[1])})')
                     else:
@@ -361,61 +361,61 @@ def _compare_columns_core(data, cols, compare_type, header_row=True,
                 else:
                     row.append(fail_text)
                 continue
-            else: #compare_type == 'numerical'
-                if not all([isinstance(point, (int, float)) for point in data_points]):
-                    if conv_text_to_num:
-                        success = True
-                        for index in (0, 1):
-                            if isinstance(data_points[index], (int, float)):
-                                pass
-                            elif isinstance(data_points[index], str):
-                                try:
-                                    data_points[index] = float(data_points[index].strip())
-                                except ValueError:
-                                    success = False
-                            else:
+            #compare_type == 'numerical'
+            if not all(isinstance(point, (int, float)) for point in data_points):
+                if conv_text_to_num:
+                    success = True
+                    for index in (0, 1):
+                        if isinstance(data_points[index], (int, float)):
+                            pass
+                        elif isinstance(data_points[index], str):
+                            try:
+                                data_points[index] = float(data_points[index].strip())
+                            except ValueError:
                                 success = False
-                        if not success:
-                            if fail_detail:
-                                row.append(f'{error_text}: (numerical compare conversion fail) {str(data_points[0])} ({type(data_points[0])}) -> {str(data_points[1])} ({type(data_points[1])})')
-                            else:
-                                row.append(error_text)
-                            continue
-                    else:
+                        else:
+                            success = False
+                    if not success:
                         if fail_detail:
-                            row.append(f'{error_text}: (numerical compare fail) {str(data_points[0])} ({type(data_points[0])}) -> {str(data_points[1])} ({type(data_points[1])})')
+                            row.append(f'{error_text}: (numerical compare conversion fail) {str(data_points[0])} ({type(data_points[0])}) -> {str(data_points[1])} ({type(data_points[1])})')
                         else:
                             row.append(error_text)
                         continue
-                if first_col_conv:
-                    def conv_fn(data_in):
-                        return eval(str(first_col_conv).format(x=data_in))
-                    try:
-                        data_points[0] = conv_fn(data_points[0])
-                    except Exception as exc:
-                        if fail_detail:
-                            row.append(f'{error_text}: first_col_conv failure: {str(exc)}')
-                        else:
-                            row.append(error_text)
-                        continue
-                if in_tolerance(data_points[0], data_points[1], tolerance): #values equal or in tolerance band
-                    if require_nonzero and data_points[0] == 0:
-                        row.append(fail_text_nonzero)
-                        continue
-                    if data_points[0] != data_points[1]: # in tolerance band but not exactly equal
-                        if fail_detail:
-                            row.append(f'{pass_in_tolerance_text}: {str(data_points[0])} -> {str(data_points[1])}')
-                        else:
-                            row.append(pass_in_tolerance_text)
-                    else: #exactly equal
-                        row.append(pass_text)
-                        continue
-                else: #values not equal
+                else:
                     if fail_detail:
-                        row.append(f'{fail_text}: {data_points[0]} -> {data_points[1]}')
+                        row.append(f'{error_text}: (numerical compare fail) {str(data_points[0])} ({type(data_points[0])}) -> {str(data_points[1])} ({type(data_points[1])})')
                     else:
-                        row.append(fail_text)
+                        row.append(error_text)
                     continue
+            if first_col_conv:
+                def conv_fn(data_in):
+                    return eval(str(first_col_conv).format(x=data_in))
+                try:
+                    data_points[0] = conv_fn(data_points[0])
+                except Exception as exc:
+                    if fail_detail:
+                        row.append(f'{error_text}: first_col_conv failure: {str(exc)}')
+                    else:
+                        row.append(error_text)
+                    continue
+            if in_tolerance(data_points[0], data_points[1], tolerance): #values equal or in tolerance band
+                if require_nonzero and data_points[0] == 0:
+                    row.append(fail_text_nonzero)
+                    continue
+                if data_points[0] != data_points[1]: # in tolerance band but not exactly equal
+                    if fail_detail:
+                        row.append(f'{pass_in_tolerance_text}: {str(data_points[0])} -> {str(data_points[1])}')
+                    else:
+                        row.append(pass_in_tolerance_text)
+                else: #exactly equal
+                    row.append(pass_text)
+                    continue
+            else: #values not equal
+                if fail_detail:
+                    row.append(f'{fail_text}: {data_points[0]} -> {data_points[1]}')
+                else:
+                    row.append(fail_text)
+                continue
     except Exception as exc:
         print(f'\n{"*"*80}\ncompare_columns(): FATAL ERROR: \n\n{str(exc)}\n\nUNDOING CHANGES TO DATA TABLE...\n{"*"*80}\n\n')
         for line in data:

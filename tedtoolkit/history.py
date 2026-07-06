@@ -97,7 +97,7 @@ def _remove_keyword_argument_from_last_command(keyword):
         print(f'WARNING: Tried to remove keyword <{keyword}> from last commany but it was not found.')
         print('          Keyword must be in the form keyword=value or keyword = value')
         return
-    rpos = lpos + min([x for x in [current[lpos:].find(',')+1, current[lpos:].find(')')] if x > 0])
+    rpos = lpos + min(x for x in [current[lpos:].find(',')+1, current[lpos:].find(')')] if x > 0)
     new_command = (current[:lpos]+current[rpos:]).replace(',)', ')').replace(', )', ')').replace(',  )', ')').replace(',   )', ')')
     _replace_last_command(new_command)
     return

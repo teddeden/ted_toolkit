@@ -257,7 +257,7 @@ def _kwarg_parse_prompt_bool(var_name, default_val='True', **kwargs):
         val = new_val
     if var_name not in kwargs:
         _add_kwarg_to_last_command(var_name, val, fn_name=traceback.extract_stack()[-2].name)
-    return True if str(val) == 'True' else False
+    return str(val) == 'True'
 _kwarg_parse_prompt_bool.desc = '[INTERNAL FUNCTION]'
 
 

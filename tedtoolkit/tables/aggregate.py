@@ -74,7 +74,7 @@ def _arithmetic_stats(array, operator, options):
     '''implements logic for sum, min, max, and average'''
     intermediate = []
     for item in array:
-        if isinstance(item, float) or isinstance(item, int):
+        if isinstance(item, (float, int)):
             intermediate.append(item)
             continue
         if isinstance(item, str):
@@ -141,7 +141,7 @@ def _get_type(line, index):
     tested = str(line[index])
     if not tested:
         return 'BLANK'
-    if (len(tested) >= 6) and set(tested).intersection(set([str(x) for x in range(10)])) and \
+    if (len(tested) >= 6) and set(tested).intersection({str(x) for x in range(10)}) and \
        (tested.count('/') >= 2 or tested.count('\\') >= 2 or tested.count('-') >= 2 or \
         tested.count('.') >= 2 or \
         [x for x in months if tested.lower().count(x)]):
@@ -374,8 +374,8 @@ def _data_aggregate_core(table_in, headers, agg_key_col, agg_key_name, agg_specs
             if cat_key_col not in range(len(table_in[0])):
                 print('Error: cat key col out of range of category aggregation. Skipping')
                 continue
-            cats = list(set([line[cat_key_col] for index, line in enumerate(table_in) \
-                             if index or not headers]))
+            cats = list({line[cat_key_col] for index, line in enumerate(table_in) \
+                             if index or not headers})
             cats.sort()
 
             if atype == 'category':
@@ -497,7 +497,7 @@ def _data_aggregate_core(table_in, headers, agg_key_col, agg_key_name, agg_specs
             continue
         if atype in ['count_unique']:
             _add_values(ret_table,
-                        {key:len(set([str(item) for item in val_dict[key]])) \
+                        {key:len({str(item) for item in val_dict[key]}) \
                                      for key in agg_key_col_dict},
                         name)
             continue

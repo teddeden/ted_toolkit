@@ -171,7 +171,7 @@ def data_preview(data_in=None, **kwargs):
             return
         print('Variable contains empty list\n')
         return
-    if isinstance(data_in, dict) or isinstance(data_in, collections.OrderedDict):
+    if isinstance(data_in, (dict, collections.OrderedDict)):
         print('Data is type **dict** with {} keys.\n\nkey - preview'.format(str(len(data_in))))
         for key in list(data_in)[:20]:
             item = data_in[key]
@@ -195,14 +195,13 @@ def _prev_s(item):
         if len(item) < 60:
             return 'String: "{}"'.format(item)
         return 'String: "{}...'.format(item[:58])
-    if isinstance(item, int) or isinstance(item, float) or isinstance(item, bool):
+    if isinstance(item, (int, float, bool)):
         return str(item)
     if isinstance(item, list):
         return 'List: ' + ', '.join([str(element) for element in item])[:60]
-    elif isinstance(item, dict):
+    if isinstance(item, dict):
         return 'Dict: ' + ', '.join([str(element) for element in item])[:60]
-    else:
-        return 'Other type: ', str(type(item))
+    return 'Other type: ', str(type(item))
 
 
 def single_col_analysis(input_list, **kwargs):

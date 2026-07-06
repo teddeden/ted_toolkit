@@ -46,9 +46,9 @@ def _xlsx_data_check(data):
                 check_ok = False
         if check_ok:
             sheet_names = list(data.keys())
-            if any([len(name) > 31 for name in sheet_names]):
+            if any(len(name) > 31 for name in sheet_names):
                 print('xlsx_export(): WARNING: Sheet names detected in excess of 31 characters; these will be truncated if possible.')
-                if len(sheet_names) > len(set([name[:31] for name in sheet_names])):
+                if len(sheet_names) > len({name[:31] for name in sheet_names}):
                     raise Exception('xlsx_export(): Truncating long sheet names results in ambiguous names. Pass unique names with max. 31 characters')
     if not check_ok:
         raise Exception(
@@ -83,7 +83,7 @@ def _xlsx_export_core(data_dict, file_path, wb_filter, view_in_excel):
     '''Pure xlsx-writing logic (no GUI, no prompting). data_dict must already be
     {sheet_name: list-of-lists}; file_path/wb_filter/view_in_excel already resolved.'''
     wbk = openpyxl.Workbook(write_only=not wb_filter)
-    existing_sheets = [name for name in wbk.sheetnames] #should be none is not using filter
+    existing_sheets = list(wbk.sheetnames) #should be none is not using filter
     for sheetname in data_dict:
         wst = wbk.create_sheet(sheetname)
         print('Exporting sheet {}...'.format(sheetname[:31]))
@@ -93,7 +93,7 @@ def _xlsx_export_core(data_dict, file_path, wb_filter, view_in_excel):
                 wst.append(line)
         if wb_filter:
             wst.auto_filter.ref = wst.dimensions
-    if existing_sheets and not any([sheet in data_dict for sheet in existing_sheets]):
+    if existing_sheets and not any(sheet in data_dict for sheet in existing_sheets):
         for sheet in existing_sheets:
             sheet_obj = wbk[sheet]
             wbk.remove(sheet_obj)

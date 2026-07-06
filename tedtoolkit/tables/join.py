@@ -59,18 +59,15 @@ def data_join(base_table, ext_table, **kwargs):
         if 'join_type' not in kwargs:
             _add_kwarg_to_last_command('join_type', _quoted(join_type))
     base_key_col, ext_key_col, neg_key_col = -1, -1, -1
-    if 'base_key_col' in kwargs:
-        base_key_col = kwargs['base_key_col']
+    base_key_col = kwargs.get('base_key_col', base_key_col)
     if 'base_key_col' not in kwargs or base_key_col not in range(len(base_table[0])):
         base_key_col = ask_select_column_index(base_table, prompt='Base table key column >> ')
         _add_kwarg_to_last_command('base_key_col', base_key_col)
-    if 'ext_key_col' in kwargs:
-        ext_key_col = kwargs['ext_key_col']
+    ext_key_col = kwargs.get('ext_key_col', ext_key_col)
     if 'ext_key_col' not in kwargs or ext_key_col not in range(len(ext_table[0])):
         ext_key_col = ask_select_column_index(ext_table, prompt='Table to join key column >> ')
         _add_kwarg_to_last_command('ext_key_col', ext_key_col)
-    if 'neg_key_col' in kwargs:
-        neg_key_col = kwargs['neg_key_col']
+    neg_key_col = kwargs.get('neg_key_col', neg_key_col)
     neg_list = kwargs.get('neg_list', None)
     if neg_list:
         if not _is_list_of_lists(neg_list, strict_nonempty=True):

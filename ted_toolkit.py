@@ -134,11 +134,10 @@ def save_history():
                                    filetypes=[('Python files', ('*.py')), ('All Files', ('*.*'))])
     if filepath[-3:] != '.py':
         filepath = filepath + '.py'
-    fil = open(filepath, 'w', encoding='utf-8')
     template = '# TED_TOOLKIT-based (v{}) Python script, autogen by {} at UTC:{}\n\n'
     template = template.format(VERSION, get_current_user(), get_utc_timestamp())
-    fil.writelines([template]+history+['\n\n'])
-    fil.close()
+    with open(filepath, 'w', encoding='utf-8') as fil:
+        fil.writelines([template]+history+['\n\n'])
     print('History saved to: \n{}'.format(filepath))
     open_in_notepad = ask_yn(default='y', prompt='Do you want to open in Notepad?')
     if open_in_notepad:
@@ -152,7 +151,7 @@ save_history.desc = 'Save interactive session to edit/re-run'
 def help_all():
     '''print info for all public functions available in toolkit'''
     global DYNAMIC_IMPORTS
-    MAIN_SPACE = 50
+    main_space = 50
     temp = globals()
     master_list = [key for key in temp if inspect.isfunction(eval(key)) and key[0] != '_']
     fns = [_get_function_declaration(item, temp) for item in master_list]
@@ -170,9 +169,9 @@ def help_all():
             if lookup_cat.get(func_name, '**no category**') != cat:
                 continue
             func = lookup_dec.get(func_name, '???')
-            divider = '...' if len(func)>MAIN_SPACE else '   '
+            divider = '...' if len(func)>main_space else '   '
             desc = getattr(eval(func_name), 'desc', '--no short description--')
-            print(f'{func[:-1][:MAIN_SPACE]:<50}{divider} {desc:<20}')
+            print(f'{func[:-1][:main_space]:<50}{divider} {desc:<20}')
     print('\n'+'*'*80+'\n')
     if DYNAMIC_IMPORTS:
         print('\nThe followig modules have been imported dynamically:\n')

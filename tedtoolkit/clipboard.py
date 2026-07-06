@@ -38,10 +38,10 @@ win_paste_table.desc = 'Paste from (excel) table'
 def win_copy_table(array):
     '''take 2d array in and convert to a text string that excel can copy into cells, then copy'''
     output_string = ''
-    for row in range(len(array)):
-        for col in range(len(array[row])):
-            output_string = output_string + str(array[row][col])
-            if col+1 in range(len(array[row])):
+    for row_data in array:
+        for col, val in enumerate(row_data):
+            output_string = output_string + str(val)
+            if col+1 < len(row_data):
                 output_string = output_string + '\t'
         output_string = output_string + '\r\n'
     win_copy(output_string)
