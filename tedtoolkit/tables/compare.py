@@ -29,21 +29,19 @@ def try_compare_columns(table, gui=True, **kwargs):
     try:
         compare_columns(table, **kwargs)
     except Exception as exc:
-        exc_text = exc.__str__()
+        exc_text = str(exc)
         info_text = f"{'*'*80}\n\nWhile running compare_columns() the following exception was thrown:\n\n{exc_text}\n\n"
         info_text += 'Parameters given to the function were as follows:\n\n'
-        for kwarg in kwargs:
-            info_text += f"    {kwarg[:20]}{kwargs[kwarg][:30]}\n"
+        for kwarg, kwarg_value in kwargs.items():
+            info_text += f"    {kwarg[:20]}{kwarg_value[:30]}\n"
         info_text += f"\n{'*'*80}\n"
         if gui:
             if not g_ask_okcancel(info_text, title='compare_columns(): ERROR', icon='error', default='ok', detail='Click OK to skip this compare step and continue, or Cancel to abort the whole operation (raise Exception).'):
-                raise Exception(info_text)
-            else:
-                print(info_text)
+                raise Exception(info_text) from exc
+            print(info_text)
         else:
             print(info_text)
         print('Skipping the above test and continuing with the remaining script execution...')
-    return
 try_compare_columns.desc = 'compare_columns(): extra exception handling'
 
 
@@ -123,6 +121,21 @@ def compare_columns(table, **kwargs):
 
     '''
     error_condition = '' #Replaces some exceptions; allows for reporting errors like missing columns as part of results
+    # Defaults for kwargs that are only actually prompted-for/bound within one compare_type
+    # branch below - pre-bound here so the _compare_columns_core(...) call always has a value
+    # to pass for every parameter, regardless of which compare_type was selected.
+    require_nonblank = False
+    case_sensitive = True
+    strip_text_fields = False
+    convert_dates = False
+    first_date_format = None
+    second_date_format = None
+    require_nonzero = False
+    conv_text_to_num = False
+    first_col_conv = None
+    tolerance = 0
+    fail_text_blank = 'FAIL_ALL_BLANK'
+    fail_text_nonzero = 'FAIL_ALL_ZERO'
 
     # Check all inputs and prompt where needed; also sanity checks on the inputs
     if not isinstance(table, list):
@@ -147,11 +160,11 @@ def compare_columns(table, **kwargs):
         data = table
     if len(data) < (2 if header_row else 1):
         raise Exception(f'compare_column() CRITICAL ERROR: table has insufficient content (table length {len(data)})')
-    if len(set([len(row) for row in data])) > 1:
+    if len({len(row) for row in data}) > 1:
         raise Exception('compare_columns() CRITICAL ERROR: table data rows have different lengths. Aborting.')
     column_select_mode = _kwarg_parse_prompt_list('column_select_mode', ['name', 'index'], **kwargs)
     if column_select_mode not in ['name', 'index']:
-        raise Exception(f'compare_columns() CRITICAL ERROR: column_select_mode should be either "name" or "index" - Aborting.')
+        raise Exception('compare_columns() CRITICAL ERROR: column_select_mode should be either "name" or "index" - Aborting.')
     cols = [-1, -1]
     if column_select_mode == 'name':
         hdr = {item:index for index, item in enumerate(data[0])}
@@ -234,7 +247,6 @@ def compare_columns(table, **kwargs):
                                title='compare_columns(): invalid tolerance for numerical compare.')
             tolerance = 0
     pass_text = _kwarg_parse_prompt_str('pass_text', default_val='PASS', prompt='{} (Text when test passes.) is < {} >. OK?', min_len=1, max_len=20, **kwargs)
-    pass_in_tolerance_text = f'{pass_text} (WITHIN TOLERANCE)'
     error_text = _kwarg_parse_prompt_str('error_text', default_val='ERROR', prompt='{} (Text when test cannot run (e.g. text in number field).) is < {} >. OK?', min_len=1, max_len=20, **kwargs)
     fail_text = _kwarg_parse_prompt_str('fail_text', default_val='FAIL', prompt='{} (Text when test fails.) is < {} >. OK?', min_len=1, max_len=20, **kwargs)
     if compare_type == 'text':
@@ -249,7 +261,7 @@ def compare_columns(table, **kwargs):
     new_col_name = _kwarg_parse_prompt_str('new_col_name', default_val=f'COMPARE: {data[0][cols[0]]} | {data[0][cols[1]]}', prompt='{} (Text to use as new column header name.) is < {} >. OK?', min_len=1, max_len=None, **kwargs)
 
     # Check on table size before continuing, log width
-    row_lengths = set([len(row) for row in data])
+    row_lengths = {len(row) for row in data}
     if len(row_lengths) > 1:
         g_conditional_stop(f'Unequal row lengths detected: {sorted(list(row_lengths))}',
                            title='compare_columns(): UNABLE TO PROCEED due to INCONSISTENT ROW LENGTHS.',
@@ -258,19 +270,14 @@ def compare_columns(table, **kwargs):
 
     _compare_columns_core(
         data, cols, compare_type, header_row=header_row,
-        require_nonblank=require_nonblank if compare_type == 'text' else False,
-        case_sensitive=case_sensitive if compare_type == 'text' else True,
-        strip_text_fields=strip_text_fields if compare_type == 'text' else False,
-        convert_dates=convert_dates if compare_type == 'date' else False,
-        first_date_format=first_date_format if compare_type == 'date' else None,
-        second_date_format=second_date_format if compare_type == 'date' else None,
-        require_nonzero=require_nonzero if compare_type == 'numerical' else False,
-        conv_text_to_num=conv_text_to_num if compare_type == 'numerical' else False,
-        first_col_conv=first_col_conv if compare_type == 'numerical' else None,
-        tolerance=tolerance if compare_type == 'numerical' else 0,
+        require_nonblank=require_nonblank, case_sensitive=case_sensitive,
+        strip_text_fields=strip_text_fields,
+        convert_dates=convert_dates, first_date_format=first_date_format,
+        second_date_format=second_date_format,
+        require_nonzero=require_nonzero, conv_text_to_num=conv_text_to_num,
+        first_col_conv=first_col_conv, tolerance=tolerance,
         pass_text=pass_text, error_text=error_text, fail_text=fail_text,
-        fail_text_blank=fail_text_blank if compare_type == 'text' and require_nonblank else 'FAIL_ALL_BLANK',
-        fail_text_nonzero=fail_text_nonzero if compare_type == 'numerical' and require_nonzero else 'FAIL_ALL_ZERO',
+        fail_text_blank=fail_text_blank, fail_text_nonzero=fail_text_nonzero,
         fail_detail=fail_detail, new_col_name=new_col_name, error_condition=error_condition,
     )
     print(f'compare_columns(): Completed comparison for "{new_col_name}"')
@@ -309,7 +316,7 @@ def _compare_columns_core(data, cols, compare_type, header_row=True,
                 continue
             data_points = [row[col] for col in cols]
             if compare_type == 'text':
-                if not all([(isinstance(point, str) or point is None) for point in data_points]):
+                if not all((isinstance(point, str) or point is None) for point in data_points):
                     if fail_detail:
                         row.append(f'{error_text}: Non-string data: {str(data_points[0])} ({type(data_points[0])}) -> {str(data_points[1])} ({type(data_points[1])})')
                     else:
@@ -325,14 +332,15 @@ def _compare_columns_core(data, cols, compare_type, header_row=True,
                     else:
                         row.append(pass_text)
                     continue
-                else: #test fail
-                    if fail_detail:
-                        row.append(f'{fail_text}: {data_points[0]} -> {data_points[1]}')
-                    else:
-                        row.append(fail_text)
-                    continue
-            elif compare_type == 'date':
-                to_str = lambda dt: f'{dt.year}-{dt.month}-{dt.day}'
+                #test fail
+                if fail_detail:
+                    row.append(f'{fail_text}: {data_points[0]} -> {data_points[1]}')
+                else:
+                    row.append(fail_text)
+                continue
+            if compare_type == 'date':
+                def to_str(dt):
+                    return f'{dt.year}-{dt.month}-{dt.day}'
                 if convert_dates:
                     data_points = [_try_convert_date(data_points[0], first_date_format),
                                    _try_convert_date(data_points[1], second_date_format)]
@@ -348,70 +356,70 @@ def _compare_columns_core(data, cols, compare_type, header_row=True,
                 if all([data_points[0].year == data_points[1].year, data_points[0].month == data_points[1].month, data_points[0].day == data_points[1].day]):
                     row.append(pass_text)
                     continue
+                if fail_detail:
+                    row.append(f'{fail_text}: {to_str(data_points[0])} -> {to_str(data_points[1])}')
+                else:
+                    row.append(fail_text)
+                continue
+            #compare_type == 'numerical'
+            if not all(isinstance(point, (int, float)) for point in data_points):
+                if conv_text_to_num:
+                    success = True
+                    for index in (0, 1):
+                        if isinstance(data_points[index], (int, float)):
+                            pass
+                        elif isinstance(data_points[index], str):
+                            try:
+                                data_points[index] = float(data_points[index].strip())
+                            except ValueError:
+                                success = False
+                        else:
+                            success = False
+                    if not success:
+                        if fail_detail:
+                            row.append(f'{error_text}: (numerical compare conversion fail) {str(data_points[0])} ({type(data_points[0])}) -> {str(data_points[1])} ({type(data_points[1])})')
+                        else:
+                            row.append(error_text)
+                        continue
                 else:
                     if fail_detail:
-                        row.append(f'{fail_text}: {to_str(data_points[0])} -> {to_str(data_points[1])}')
+                        row.append(f'{error_text}: (numerical compare fail) {str(data_points[0])} ({type(data_points[0])}) -> {str(data_points[1])} ({type(data_points[1])})')
                     else:
-                        row.append(fail_text)
+                        row.append(error_text)
                     continue
-            else: #compare_type == 'numerical'
-                if not all([isinstance(point, (int, float)) for point in data_points]):
-                    if conv_text_to_num:
-                        success = True
-                        for index in (0, 1):
-                            if isinstance(data_points[index], (int, float)):
-                                pass
-                            elif isinstance(data_points[index], str):
-                                try:
-                                    data_points[index] = float(data_points[index].strip())
-                                except ValueError:
-                                    success = False
-                            else:
-                                success = False
-                        if not success:
-                            if fail_detail:
-                                row.append(f'{error_text}: (numerical compare conversion fail) {str(data_points[0])} ({type(data_points[0])}) -> {str(data_points[1])} ({type(data_points[1])})')
-                            else:
-                                row.append(error_text)
-                            continue
-                    else:
-                        if fail_detail:
-                            row.append(f'{error_text}: (numerical compare fail) {str(data_points[0])} ({type(data_points[0])}) -> {str(data_points[1])} ({type(data_points[1])})')
-                        else:
-                            row.append(error_text)
-                        continue
-                if first_col_conv:
-                    conv_fn = lambda data_in: eval(str(first_col_conv).format(x=data_in))
-                    try:
-                        data_points[0] = conv_fn(data_points[0])
-                    except Exception as exc:
-                        if fail_detail:
-                            row.append(f'{error_text}: first_col_conv failure: {str(exc)}')
-                        else:
-                            row.append(error_text)
-                        continue
-                if in_tolerance(data_points[0], data_points[1], tolerance): #values equal or in tolerance band
-                    if require_nonzero and data_points[0] == 0:
-                        row.append(fail_text_nonzero)
-                        continue
-                    elif data_points[0] != data_points[1]: # in tolerance band but not exactly equal
-                        if fail_detail:
-                            row.append(f'{pass_in_tolerance_text}: {str(data_points[0])} -> {str(data_points[1])}')
-                        else:
-                            row.append(pass_in_tolerance_text)
-                    else: #exactly equal
-                        row.append(pass_text)
-                        continue
-                else: #values not equal
+            if first_col_conv:
+                def conv_fn(data_in):
+                    return eval(str(first_col_conv).format(x=data_in))
+                try:
+                    data_points[0] = conv_fn(data_points[0])
+                except Exception as exc:
                     if fail_detail:
-                        row.append(f'{fail_text}: {data_points[0]} -> {data_points[1]}')
+                        row.append(f'{error_text}: first_col_conv failure: {str(exc)}')
                     else:
-                        row.append(fail_text)
+                        row.append(error_text)
                     continue
+            if in_tolerance(data_points[0], data_points[1], tolerance): #values equal or in tolerance band
+                if require_nonzero and data_points[0] == 0:
+                    row.append(fail_text_nonzero)
+                    continue
+                if data_points[0] != data_points[1]: # in tolerance band but not exactly equal
+                    if fail_detail:
+                        row.append(f'{pass_in_tolerance_text}: {str(data_points[0])} -> {str(data_points[1])}')
+                    else:
+                        row.append(pass_in_tolerance_text)
+                else: #exactly equal
+                    row.append(pass_text)
+                    continue
+            else: #values not equal
+                if fail_detail:
+                    row.append(f'{fail_text}: {data_points[0]} -> {data_points[1]}')
+                else:
+                    row.append(fail_text)
+                continue
     except Exception as exc:
         print(f'\n{"*"*80}\ncompare_columns(): FATAL ERROR: \n\n{str(exc)}\n\nUNDOING CHANGES TO DATA TABLE...\n{"*"*80}\n\n')
         for line in data:
-            while(len(line) > row_length):
+            while len(line) > row_length:
                 _ = line.pop()
         raise exc
     return data
@@ -442,9 +450,11 @@ def pre_process_specs_detail(specs_detail):
     >>> for spec in specs: try_compare_columns(res['joined'], **spec)
     '''
     ret_dict = collections.OrderedDict()
-    if not specs_detail: return ret_dict
+    if not specs_detail:
+        return ret_dict
     specs_hdr = {item:index for index, item in enumerate(specs_detail[0])}
-    if 'first_col' not in specs_hdr.keys(): raise Exception('pre_process_specs_detail(): Expected to find a column for "first_col" in the specs file.  Not found.  Aborting.')
+    if 'first_col' not in specs_hdr:
+        raise Exception('pre_process_specs_detail(): Expected to find a column for "first_col" in the specs file.  Not found.  Aborting.')
     f_idx = specs_hdr['first_col']
     encoded_consts = [line[f_idx] for line in specs_detail[1:] if line[f_idx][:7] == '**CONST']
     for encoded_const in encoded_consts:
@@ -463,12 +473,12 @@ def pre_process_specs_detail(specs_detail):
             try:
                 ret_dict[encoded_const] = int(unpacked[2])
             except Exception as exc_text:
-                raise Exception(f'pre_process_specs_detail(): Error with **CONST definition in specs file. int type could not be converted from text string: {unpacked[2]}.\n\n Error: {str(exc_text)}')
+                raise Exception(f'pre_process_specs_detail(): Error with **CONST definition in specs file. int type could not be converted from text string: {unpacked[2]}.\n\n Error: {str(exc_text)}') from exc_text
         elif unpacked[1] == 'float':
             try:
                 ret_dict[encoded_const] = float(unpacked[2])
             except Exception as exc_text:
-                raise Exception(f'pre_process_specs_detail(): Error with **CONST definition in specs file. float type could not be converted from text string: {unpacked[2]}.\n\n Error: {str(exc_text)}')
+                raise Exception(f'pre_process_specs_detail(): Error with **CONST definition in specs file. float type could not be converted from text string: {unpacked[2]}.\n\n Error: {str(exc_text)}') from exc_text
         else:
             raise Exception(f'pre_process_specs_detail(): Error with **CONST definition in specs file. format is "**CONST <type> <value>" where type must be str, int, float, or bool. Received {unpacked[2]}.. Aborting.')
     return ret_dict

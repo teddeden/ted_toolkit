@@ -10,7 +10,6 @@ from tedtoolkit.prompts import (ask_yn, ask_select, ask_select_column_index,
 
 def _review_options(options_in, table_in):
     '''takes in dict of options, prompts the user to modify according to type, or confirm'''
-    CAT_PROMPT = 'Which column to use as category? \n(each value found will get own column) >> '
     for key in options_in:
         if key in ['cat_key_col']:
             continue
@@ -24,7 +23,6 @@ def _review_options(options_in, table_in):
                 key, options_in[key])):
                 options_in[key] = input('Type new string to use for <{}> >>'.format(key))
             continue
-    return
 
 
 def _add_values(ret_table, val_dict, title):
@@ -65,9 +63,9 @@ def _bool_calc(array, operator, options):
         return ''
     temp = {'and':True, 'or':False}[operator]
     for item in intermediate:
-        if item == True and operator == 'or':
+        if item is True and operator == 'or':
             temp = True
-        if item == False and operator == 'and':
+        if item is False and operator == 'and':
             temp = False
     return temp
 
@@ -76,7 +74,7 @@ def _arithmetic_stats(array, operator, options):
     '''implements logic for sum, min, max, and average'''
     intermediate = []
     for item in array:
-        if isinstance(item, float) or isinstance(item, int):
+        if isinstance(item, (float, int)):
             intermediate.append(item)
             continue
         if isinstance(item, str):
@@ -86,12 +84,10 @@ def _arithmetic_stats(array, operator, options):
             except ValueError:
                 if options['ignore_non_numbers'] or (len(item) == 0 and options['ignore_empty']):
                     continue
-                else:
-                    return options['non_numbers_text']
+                return options['non_numbers_text']
         if options['ignore_non_numbers']:
             continue
-        else:
-            return options['non_numbers_text']
+        return options['non_numbers_text']
     if len(intermediate) == 0:
         return options['empty_text']
     return {'sum':sum(intermediate), 'min':min(intermediate), 'max':max(intermediate), \
@@ -122,8 +118,7 @@ def _filled_stats(array, operator):
         return {'all_filled':False, 'some_filled':False, 'none_filled':True}[operator]
     if len(filled) == len(array):
         return {'all_filled':True, 'some_filled':True, 'none_filled':False}[operator]
-    else:
-        return {'all_filled':False, 'some_filled':True, 'none_filled':False}[operator]
+    return {'all_filled':False, 'some_filled':True, 'none_filled':False}[operator]
 
 
 def _get_float(var, default_val='NaN'):
@@ -146,7 +141,7 @@ def _get_type(line, index):
     tested = str(line[index])
     if not tested:
         return 'BLANK'
-    if (len(tested) >= 6) and set(tested).intersection(set([str(x) for x in range(10)])) and \
+    if (len(tested) >= 6) and set(tested).intersection({str(x) for x in range(10)}) and \
        (tested.count('/') >= 2 or tested.count('\\') >= 2 or tested.count('-') >= 2 or \
         tested.count('.') >= 2 or \
         [x for x in months if tested.lower().count(x)]):
@@ -379,8 +374,8 @@ def _data_aggregate_core(table_in, headers, agg_key_col, agg_key_name, agg_specs
             if cat_key_col not in range(len(table_in[0])):
                 print('Error: cat key col out of range of category aggregation. Skipping')
                 continue
-            cats = list(set([line[cat_key_col] for index, line in enumerate(table_in) \
-                             if index or not headers]))
+            cats = list({line[cat_key_col] for index, line in enumerate(table_in) \
+                             if index or not headers})
             cats.sort()
 
             if atype == 'category':
@@ -451,7 +446,7 @@ def _data_aggregate_core(table_in, headers, agg_key_col, agg_key_name, agg_specs
                     if var_type == 'BLANK' or \
                        cat_data[line[cat_key_col]][line[agg_key_col]] == non_numbers_text:
                         continue
-                    elif var_type in ['DATE', 'TEXT'] and not ignore_non_numbers:
+                    if var_type in ['DATE', 'TEXT'] and not ignore_non_numbers:
                         cat_data[line[cat_key_col]][line[agg_key_col]] = non_numbers_text
                     else:
                         cat_data[line[cat_key_col]][line[agg_key_col]] += _get_float(line[col],
@@ -502,7 +497,7 @@ def _data_aggregate_core(table_in, headers, agg_key_col, agg_key_name, agg_specs
             continue
         if atype in ['count_unique']:
             _add_values(ret_table,
-                        {key:len(set([str(item) for item in val_dict[key]])) \
+                        {key:len({str(item) for item in val_dict[key]}) \
                                      for key in agg_key_col_dict},
                         name)
             continue

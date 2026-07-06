@@ -80,7 +80,6 @@ def _find_notepad_pp(initial_dir='c:/ProgramData/App-V'):
 def beep():
     '''make a short beep (e.g. to let the user know that something is finished)'''
     print('\a', end='')
-    return
 beep.desc = 'Windows chime'
 
 

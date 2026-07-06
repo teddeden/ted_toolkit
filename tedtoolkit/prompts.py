@@ -69,8 +69,7 @@ def ask_num(**kwargs):
             if abc - int(abc) != 0:
                 print('Invalid input. You must enter an integer (decimal values not allowed).')
                 continue
-            else:
-                return int(abc)
+            return int(abc)
         break
     return abc
 ask_num.desc = 'user prompt: number'
@@ -108,7 +107,7 @@ def ask_select(var_in, prompt='Select an index from the following:', print_keys=
             default_index = temp[0]
         else:
             default_index = 0
-            print(f'ask_select(): WARNING: default value passed to ask_select not found in var_in / setting first element as default.')
+            print('ask_select(): WARNING: default value passed to ask_select not found in var_in / setting first element as default.')
         selection = ask_num(allow_decimal=False, allow_negative=False, allow_default=True, default=default_index,
                             prompt=f'(enter for default value {default_index})#: ')
     if selection not in range(len(var_in)):
@@ -258,7 +257,7 @@ def _kwarg_parse_prompt_bool(var_name, default_val='True', **kwargs):
         val = new_val
     if var_name not in kwargs:
         _add_kwarg_to_last_command(var_name, val, fn_name=traceback.extract_stack()[-2].name)
-    return True if str(val) == 'True' else False
+    return str(val) == 'True'
 _kwarg_parse_prompt_bool.desc = '[INTERNAL FUNCTION]'
 
 
@@ -282,8 +281,7 @@ def _kwarg_parse_prompt_list(var_name, choices_list, **kwargs):
     if var_name in kwargs:
         if kwargs[var_name] in choices_list:
             return kwargs[var_name]
-        else:
-            overwrite = True
+        overwrite = True
     val = ask_select(choices_list, prompt=f'for <{var_name}> please choose an option:', orig_out=True)
     if overwrite:
         _remove_keyword_argument_from_last_command(var_name)

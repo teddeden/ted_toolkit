@@ -46,9 +46,9 @@ def _xlsx_data_check(data):
                 check_ok = False
         if check_ok:
             sheet_names = list(data.keys())
-            if any([len(name) > 31 for name in sheet_names]):
+            if any(len(name) > 31 for name in sheet_names):
                 print('xlsx_export(): WARNING: Sheet names detected in excess of 31 characters; these will be truncated if possible.')
-                if len(sheet_names) > len(set([name[:31] for name in sheet_names])):
+                if len(sheet_names) > len({name[:31] for name in sheet_names}):
                     raise Exception('xlsx_export(): Truncating long sheet names results in ambiguous names. Pass unique names with max. 31 characters')
     if not check_ok:
         raise Exception(
@@ -83,8 +83,8 @@ def _xlsx_export_core(data_dict, file_path, wb_filter, view_in_excel):
     '''Pure xlsx-writing logic (no GUI, no prompting). data_dict must already be
     {sheet_name: list-of-lists}; file_path/wb_filter/view_in_excel already resolved.'''
     wbk = openpyxl.Workbook(write_only=not wb_filter)
-    existing_sheets = [name for name in wbk.sheetnames] #should be none is not using filter
-    for index, sheetname in enumerate(data_dict):
+    existing_sheets = list(wbk.sheetnames) #should be none is not using filter
+    for sheetname in data_dict:
         wst = wbk.create_sheet(sheetname)
         print('Exporting sheet {}...'.format(sheetname[:31]))
         with click.progressbar(data_dict[sheetname],
@@ -93,7 +93,7 @@ def _xlsx_export_core(data_dict, file_path, wb_filter, view_in_excel):
                 wst.append(line)
         if wb_filter:
             wst.auto_filter.ref = wst.dimensions
-    if existing_sheets and not any([sheet in data_dict for sheet in existing_sheets]):
+    if existing_sheets and not any(sheet in data_dict for sheet in existing_sheets):
         for sheet in existing_sheets:
             sheet_obj = wbk[sheet]
             wbk.remove(sheet_obj)
@@ -104,7 +104,6 @@ def _xlsx_export_core(data_dict, file_path, wb_filter, view_in_excel):
         excel = win32com.client.dynamic.Dispatch('excel.application')
         _ = excel.Workbooks.Open(file_path)
         excel.Visible = True
-    return
 
 
 def xlsx_import(**kwargs):
@@ -131,9 +130,10 @@ def xlsx_import(**kwargs):
 def _xlsx_import_core(file_path, include_formulas, override_ro):
     '''Pure xlsx-reading logic (no GUI, no prompting). file_path already resolved.'''
     ro = not override_ro
-    fn = lambda line: [item.value for item in line]
+    def fn(line):
+        return [item.value for item in line]
     data_in = openpyxl.load_workbook(file_path, read_only=ro,
-        data_only=(not include_formulas))
+        data_only=not include_formulas)
     print('Reading workbook at path: {}'.format(file_path))
     ret_dict = collections.OrderedDict()
     for sheet_name in data_in.sheetnames:
@@ -149,7 +149,7 @@ def ask_select_sheet(dict_in, prompt='Select a sheet to import', include_all=Tru
     '''Prompt for selecting a sheet from a dict of Excel sheets, or else choosing all sheets'''
     if not isinstance(dict_in, dict):
         raise Exception('ERROR: ask_select_sheet() called without a dict of sheets as input!')
-    if len(dict_in) == 1 and include_all == False:
+    if len(dict_in) == 1 and not include_all:
         print(f'Only 1 sheet available: selecting it as default: {list(dict_in.keys())[0]}')
         return list(dict_in.keys())[0]
     print(prompt+'\n')

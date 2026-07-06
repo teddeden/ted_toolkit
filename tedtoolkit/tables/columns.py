@@ -25,8 +25,7 @@ def extract_column_from_table(table_in, **kwargs):
         print('Extracting column {} to variable: ** {} **'.format(str(col), var_name))
     if strip_header:
         return [line[col] for line in table_in[1:]]
-    else:
-        return [line[col] for line in table_in]
+    return [line[col] for line in table_in]
 extract_column_from_table.desc = 'Get column as 1-d list'
 
 

@@ -23,7 +23,7 @@ def g_sel_file(**kwargs):
         parent=gui
         )
     gui.withdraw()
-    if path == None: #User cancels dialog
+    if path is None: #User cancels dialog
         print('User canceled file select dialog. Aborting')
         return ''
     return path
@@ -45,7 +45,7 @@ def g_sel_file_to_write(**kwargs):
         parent=gui,
         initialfile=kwargs.get('initial_file', '')
         )
-    if path == None or path == '': #User cancels dialog
+    if path is None or path == '': #User cancels dialog
         return ''
     if 'force_file_extension' in kwargs:
         target_ext = kwargs.get('force_file_extension')
@@ -74,7 +74,7 @@ def g_sel_folder(**kwargs):
         parent=gui,
         )
     gui.withdraw()
-    if path == None: #User cancels dialog
+    if path is None: #User cancels dialog
         print('User canceled dialog.  Aborting.')
         return ''
     return path

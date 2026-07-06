@@ -30,13 +30,13 @@ def _isolated(string_in, search_string, loc):
                 cur_str_delim = item
             code.append(index)
             continue
-        else: #status == 'STRINGS'
-            if item == cur_str_delim and string_in[index - 1] != '\\':
-                code.append(index)
-                flip_status()
-                cur_str_delim = None
-            else:
-                strings.append(index)
+        #status == 'STRINGS'
+        if item == cur_str_delim and string_in[index - 1] != '\\':
+            code.append(index)
+            flip_status()
+            cur_str_delim = None
+        else:
+            strings.append(index)
     if loc in strings:
         return False
     if loc + len(search_string) < len(string_in):
@@ -62,7 +62,6 @@ def _guess_var(calling_function):
     '''returns the best guess of what variable the user would like to execute the function on
     used by e.g. data_preview()'''
     last = _get_previous_command()
-    curr = _get_last_command()
     ass_pos = last.find('=')
     col_pos = last.find(':')
     app_pos = last.find('.append(')
@@ -73,12 +72,12 @@ def _guess_var(calling_function):
     ass_var = None
 
     if last[:4] == 'for ' and (ass_pos > 0 or app_pos > 0) and col_pos > 0 and in_pos > 5:
-        '''(I) for item in my_list: item = []; (I)for item in my_list[1:]: item += 1;
-        (I)for line in my_table[1:]: line.append(my_function(line));
-        (I)for index, line in enumerate(abc): line.append(index)
-        (II)for a in range(10): some_other_var_we_want_to_preview += a;
-        (II)for index, item in enumerate(uninteresting_var):
-                some_other_var_we_want_to_preview[index] += item'''
+        # (I) for item in my_list: item = []; (I)for item in my_list[1:]: item += 1;
+        # (I)for line in my_table[1:]: line.append(my_function(line));
+        # (I)for index, line in enumerate(abc): line.append(index)
+        # (II)for a in range(10): some_other_var_we_want_to_preview += a;
+        # (II)for index, item in enumerate(uninteresting_var):
+        #         some_other_var_we_want_to_preview[index] += item
         loop_var_name = last.split(' ')[1 if 'enumerate' not in last else 2].strip()
         print('Loop var name: ', loop_var_name)
         loop_var_name_positions = _all_pos(last, loop_var_name)
@@ -86,12 +85,12 @@ def _guess_var(calling_function):
         print('Loop Var Second Position: ', loop_var_sec_pos)
         if (loop_var_sec_pos > ass_pos and ass_pos != -1) or \
            (loop_var_sec_pos > app_pos and app_pos != -1):
-            '''(II)'''
+            # (II)
             print('Case II')
             ass_var = last[col_pos+1:app_pos+ass_pos+1].strip('/%*+- ')
             print('Assignment var = ', ass_var)
         else:
-            '''(I)'''
+            # (I)
             print('Case I')
             ass_var = last[in_pos+2:col_pos].strip()
             print('Assvar = ', ass_var)
@@ -105,18 +104,18 @@ def _guess_var(calling_function):
     print('Assignment var = ', ass_var)
 
     if last[:4] != 'for ' and ass_pos > 0 and app_pos == -1:
-        '''abc = defg'''
+        # abc = defg
         ass_var = last[:ass_pos].strip('%*/+- ')
 
     if last[:4] != 'for ' and ass_pos == -1 and app_pos > 0:
-        '''a.append('cow')'''
+        # a.append('cow')
         ass_var = last[:app_pos].strip()
 
     # Look up ass_var in the *interactive session's* globals, not this
     # module's own globals - _guess_var() only makes sense relative to
     # whatever namespace the user is actually typing commands into.
     caller_globals = sys._getframe(2).f_globals
-    if ass_var != None and len(ass_var) and ass_var in caller_globals:
+    if ass_var is not None and len(ass_var) and ass_var in caller_globals:
         return ass_var
     print('Ambiguous variable {}; {} canceled'.format(
         ass_var, calling_function))
@@ -140,12 +139,11 @@ def data_preview(data_in=None, **kwargs):
         if var_name:
             print(f'\nPreviewing ****  {var_name}  ****\n')
     else:
-        if data_in == None:
+        if data_in is None:
             ass_var = _guess_var('data_preview')
-            if ass_var == None:
+            if ass_var is None:
                 return
-            else:
-                data_in = sys._getframe(1).f_globals.get(ass_var)
+            data_in = sys._getframe(1).f_globals.get(ass_var)
         else:
             cmd = _get_last_command()
             ass_var = cmd[cmd.find('(')+1:cmd.find(')')]
@@ -171,10 +169,9 @@ def data_preview(data_in=None, **kwargs):
                 print('Item count: {}\n'.format(str(len(data_in))))
                 print(_prev_s(data_in))
             return
-        else:
-            print('Variable contains empty list\n')
-            return
-    if isinstance(data_in, dict) or isinstance(data_in, collections.OrderedDict):
+        print('Variable contains empty list\n')
+        return
+    if isinstance(data_in, (dict, collections.OrderedDict)):
         print('Data is type **dict** with {} keys.\n\nkey - preview'.format(str(len(data_in))))
         for key in list(data_in)[:20]:
             item = data_in[key]
@@ -197,16 +194,14 @@ def _prev_s(item):
     if isinstance(item, str):
         if len(item) < 60:
             return 'String: "{}"'.format(item)
-        else:
-            return 'String: "{}...'.format(item[:58])
-    elif isinstance(item, int) or isinstance(item, float) or isinstance(item, bool):
+        return 'String: "{}...'.format(item[:58])
+    if isinstance(item, (int, float, bool)):
         return str(item)
-    elif isinstance(item, list):
+    if isinstance(item, list):
         return 'List: ' + ', '.join([str(element) for element in item])[:60]
-    elif isinstance(item, dict):
+    if isinstance(item, dict):
         return 'Dict: ' + ', '.join([str(element) for element in item])[:60]
-    else:
-        return 'Other type: ', str(type(item))
+    return 'Other type: ', str(type(item))
 
 
 def single_col_analysis(input_list, **kwargs):

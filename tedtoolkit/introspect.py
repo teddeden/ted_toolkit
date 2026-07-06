@@ -64,7 +64,7 @@ def _get_function_declaration(fn_name, namespace):
             raise exc
     if not source:
         return ''
-    return source.split('\n')[0].strip()
+    return source.split('\n', maxsplit=1)[0].strip()
 
 
 def _get_module_functions(module):

@@ -21,9 +21,8 @@ def read_txt(**kwargs):
         return None
     if 'encoding' not in kwargs:
         kwargs['encoding'] = 'utf-8'
-    fil = codecs.open(file_path, **kwargs)
-    data = list(fil)
-    fil.close()
+    with codecs.open(file_path, **kwargs) as fil:
+        data = list(fil)
     return data
 read_txt.desc = 'Import text file'
 
