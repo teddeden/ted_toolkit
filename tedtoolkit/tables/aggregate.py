@@ -190,7 +190,62 @@ def data_aggregate(table_in, **kwargs):
                                           prompt='AGGREGATION KEY *label* is <{1}> - Ok?',
                                           default_val=table_in[0][agg_key_col] if headers \
                                           else 'KEY', **kwargs)
-    att_agg_types = collections.OrderedDict([
+    agg_specs = kwargs.get('agg_specs', [])
+    if len(agg_specs) == 0:
+        print('No aggregation specs provided. You will be prompted for them, one at a time.\n')
+        while True:
+            print('Aggregation specification {}:'.format(str(len(agg_specs))))
+            try:
+                agg_type = ask_select(ATT_AGG_TYPES)
+                if 'category' in agg_type or not \
+                   ask_yn(default='n', prompt='Aggregate all columns? '):
+                    if 'category' in agg_type:
+                        pmt = 'Select CATEGORY (Unique values to be COLUMNS in result table) >> '
+                        agg_options = {'cat_key_col':ask_select_column_index(table_in, prompt=pmt)}
+                    else:
+                        agg_options = {}
+                    pmt = 'Select AGGREGATION ATTRIBUTE COLUMN (Values of interest to process) >> '
+                    agg_col = ask_select_column_index(table_in, prompt=pmt)
+                    agg_name = '{} - {} - {}'.format(str(len(agg_specs)), agg_type,
+                                                     table_in[0][agg_col] if headers \
+                                                     else 'col'+str(agg_col))
+                    pmt = 'AGG NAME (columns to be formed by AGG NAME - CATEGORY) is <{}>. OK? '
+                    while not ask_yn(default='y', prompt=pmt.format(agg_name)):
+                        agg_name = input(\
+                            'Enter new AGG NAME (column headers in form AGG NAME - CATEGORY >> ')
+                    for key in ATT_AGG_DEFAULT_OPTIONS[agg_type]:
+                        if key not in agg_options:
+                            agg_options[key] = ATT_AGG_DEFAULT_OPTIONS[agg_type][key]
+                    _review_options(agg_options, table_in)
+                    new_spec = {'agg_type':agg_type, 'agg_col':agg_col, 'agg_options':agg_options,
+                                'agg_name':agg_name}
+                    agg_specs.append(new_spec)
+                else:
+                    agg_options = {key:ATT_AGG_DEFAULT_OPTIONS[agg_type][key] \
+                                   for key in ATT_AGG_DEFAULT_OPTIONS[agg_type]}
+                    _review_options(agg_options, table_in)
+                    for agg_col in range(len(table_in[0])):
+                        agg_name = '{} - {} - {}'.format(str(len(agg_specs)), agg_type,
+                                                         table_in[0][agg_col] \
+                                                         if headers else 'col'+str(agg_col))
+                        new_spec = {'agg_type':agg_type, 'agg_col':agg_col,
+                                    'agg_options':agg_options, 'agg_name':agg_name}
+                        agg_specs.append(new_spec)
+            except KeyboardInterrupt:
+                print('New aggregation spec cancelled. Press Ctrl+c again to stop altogether.')
+            if not ask_yn(default='y', prompt='Current agg. specs:\n {}; \n\nselect more?'.format(\
+                '\n'.join([item['agg_name'] for item in agg_specs]))):
+                break
+        _add_kwarg_to_last_command('agg_specs', str(agg_specs), fn_name='data_aggregate')
+    ret_table = _data_aggregate_core(table_in, headers, agg_key_col, agg_key_name, agg_specs)
+    if ass_var:
+        print('Aggregation complete. Assigning result table to variable <{}>.'.format(ass_var))
+    print('\n')
+    return ret_table
+data_aggregate.desc = 'List of lists guided aggregation'
+
+
+ATT_AGG_TYPES = collections.OrderedDict([
         ('category', 'Aggregates according to category, creating multiple rows per attribute'),
         ('category-sum',
          'Sums records found per ID and category, creating multiple rows per attribute'),
@@ -231,118 +286,77 @@ def data_aggregate(table_in, **kwargs):
         ('some_filled', 'Report true if at least one value filled across aggregation scope'),
         ('none_filled', 'Report true if there are no values filled across the aggregation scope'),
         ])
-    att_agg_default_options = {
-        'category':{'cat_key_col':-1, 'allow_duplicates_if_equal':False,
-                    'duplicates_text':'-Duplicate entries-'},
-        'category-sum':{'cat_key_col':-1, 'ignore_non_numbers':False,
-                        'non_numbers_text':'-Non-numeric-'},
-        'category-concat-unique':{'cat_key_col':-1, 'link_text':', '},
-        'concatenate':{'strip':True, 'link_text':', '},
-        'concatenate_unique':{'strip':True, 'link_text':', '},
-        'and':{'allow_yn':True, 'allow_01':True, 'allow_tf':True, 'ignore_blanks':False,
-               'invalid_text':'-Non-boolean value found-'},
-        'or':{'allow_yn':True, 'allow_01':True, 'allow_tf':True, 'ignore_blanks':False,
-              'invalid_text':'-Non-boolean value found-'},
-        'count_nonempty':{'strip':True},
-        'count_all':{},
-        'count_unique':{'strip':True},
-        'sum':{'ignore_non_numbers':False, 'non_numbers_text':'-Non-numeric-', 'ignore_empty':True,
-               'empty_text':'-All empty-'},
-        'min':{'ignore_non_numbers':False, 'non_numbers_text':'-Non-numeric-', 'ignore_empty':True,
-               'empty_text':'-All empty-'},
-        'max':{'ignore_non_numbers':False, 'non_numbers_text':'-Non-numeric-', 'ignore_empty':True,
-               'empty_text':'-All empty-'},
-        'average':{'ignore_non_numbers':False, 'non_numbers_text':'-Non-numeric-',
-                   'ignore_empty':True, 'empty_text':'-All empty-'},
-        'are_same':{'strip':True},
-        'min_text_length':{'strip':True, 'non_text_message':'-Field(s) without text data-',
-                           'empty_text':'-All empty-'},
-        'max_text_length':{'strip':True, 'non_text_message':'-Field(s) without text data-',
-                           'empty_text':'-All empty-'},
-        'avg_text_length':{'strip':True, 'non_text_message':'-Field(s) without text data-',
-                           'empty_text':'-All empty-'},
-        'all_filled':{'strip':True},
-        'some_filled':{'strip':True},
-        'none_filled':{'strip':True},
-        'category-and':{'allow_yn':True, 'allow_01':True, 'allow_tf':True, 'ignore_blanks':False,
-                        'invalid_text':'-Non-boolean value found-', 'cat_key_col':-1},
-        'category-or':{'allow_yn':True, 'allow_01':True, 'allow_tf':True, 'ignore_blanks':False,
-                       'invalid_text':'-Non-boolean value found-', 'cat_key_col':-1},
-        'category-count-nonempty':{'cat_key_col':-1, 'strip':True},
-        'category-count-all':{'cat_key_col':-1, 'strip':True},
-        'category-count-unique':{'cat_key_col':-1, 'strip':True},
+ATT_AGG_DEFAULT_OPTIONS = {
+    'category':{'cat_key_col':-1, 'allow_duplicates_if_equal':False,
+                'duplicates_text':'-Duplicate entries-'},
+    'category-sum':{'cat_key_col':-1, 'ignore_non_numbers':False,
+                    'non_numbers_text':'-Non-numeric-'},
+    'category-concat-unique':{'cat_key_col':-1, 'link_text':', '},
+    'concatenate':{'strip':True, 'link_text':', '},
+    'concatenate_unique':{'strip':True, 'link_text':', '},
+    'and':{'allow_yn':True, 'allow_01':True, 'allow_tf':True, 'ignore_blanks':False,
+           'invalid_text':'-Non-boolean value found-'},
+    'or':{'allow_yn':True, 'allow_01':True, 'allow_tf':True, 'ignore_blanks':False,
+          'invalid_text':'-Non-boolean value found-'},
+    'count_nonempty':{'strip':True},
+    'count_all':{},
+    'count_unique':{'strip':True},
+    'sum':{'ignore_non_numbers':False, 'non_numbers_text':'-Non-numeric-', 'ignore_empty':True,
+           'empty_text':'-All empty-'},
+    'min':{'ignore_non_numbers':False, 'non_numbers_text':'-Non-numeric-', 'ignore_empty':True,
+           'empty_text':'-All empty-'},
+    'max':{'ignore_non_numbers':False, 'non_numbers_text':'-Non-numeric-', 'ignore_empty':True,
+           'empty_text':'-All empty-'},
+    'average':{'ignore_non_numbers':False, 'non_numbers_text':'-Non-numeric-',
+               'ignore_empty':True, 'empty_text':'-All empty-'},
+    'are_same':{'strip':True},
+    'min_text_length':{'strip':True, 'non_text_message':'-Field(s) without text data-',
+                       'empty_text':'-All empty-'},
+    'max_text_length':{'strip':True, 'non_text_message':'-Field(s) without text data-',
+                       'empty_text':'-All empty-'},
+    'avg_text_length':{'strip':True, 'non_text_message':'-Field(s) without text data-',
+                       'empty_text':'-All empty-'},
+    'all_filled':{'strip':True},
+    'some_filled':{'strip':True},
+    'none_filled':{'strip':True},
+    'category-and':{'allow_yn':True, 'allow_01':True, 'allow_tf':True, 'ignore_blanks':False,
+                    'invalid_text':'-Non-boolean value found-', 'cat_key_col':-1, 'strip':True},
+    'category-or':{'allow_yn':True, 'allow_01':True, 'allow_tf':True, 'ignore_blanks':False,
+                   'invalid_text':'-Non-boolean value found-', 'cat_key_col':-1, 'strip':True},
+    'category-count-nonempty':{'cat_key_col':-1, 'strip':True},
+    'category-count-all':{'cat_key_col':-1, 'strip':True},
+    'category-count-unique':{'cat_key_col':-1, 'strip':True},
 
-        'category-min':{'cat_key_col':-1, 'ignore_non_numbers':False,
+    'category-min':{'cat_key_col':-1, 'ignore_non_numbers':False,
+                    'non_numbers_text':'-Non-numeric-', 'ignore_empty':True,
+                    'empty_text':'-All empty-', 'strip':True},
+    'category-max':{'cat_key_col':-1, 'ignore_non_numbers':False,
+                    'non_numbers_text':'-Non-numeric-', 'ignore_empty':True,
+                    'empty_text':'-All empty-', 'strip':True},
+    'category-average':{'cat_key_col':-1, 'ignore_non_numbers':False,
                         'non_numbers_text':'-Non-numeric-', 'ignore_empty':True,
-                        'empty_text':'-All empty-'},
-        'category-max':{'cat_key_col':-1, 'ignore_non_numbers':False,
-                        'non_numbers_text':'-Non-numeric-', 'ignore_empty':True,
-                        'empty_text':'-All empty-'},
-        'category-average':{'cat_key_col':-1, 'ignore_non_numbers':False,
-                            'non_numbers_text':'-Non-numeric-', 'ignore_empty':True,
-                            'empty_text':'-All empty-'},
-        'category-are-same':{'cat_key_col':-1, 'strip':True, 'not_found_text':'<No record found>'},
-        'category-min-text-length':{'cat_key_col':-1, 'strip':True,
-                                    'non_text_message':'-Field(s) without text data-',
-                                    'empty_text':'-All empty-'},
-        'category-max-text-length':{'cat_key_col':-1, 'strip':True,
-                                    'non_text_message':'-Field(s) without text data-',
-                                    'empty_text':'-All empty-'},
-        'category-avg-text-length':{'cat_key_col':-1, 'strip':True,
-                                    'non_text_message':'-Field(s) without text data-',
-                                    'empty_text':'-All empty-'},
-        'category-all-filled':{'cat_key_col':-1, 'strip':True},
-        'category-some-filled':{'cat_key_col':-1, 'strip':True},
-        'category-none-filled':{'cat_key_col':-1, 'strip':True},
-        }
-    agg_specs = kwargs.get('agg_specs', [])
-    if len(agg_specs) == 0:
-        print('No aggregation specs provided. You will be prompted for them, one at a time.\n')
-        while True:
-            print('Aggregation specification {}:'.format(str(len(agg_specs))))
-            try:
-                agg_type = ask_select(att_agg_types)
-                if 'category' in agg_type or not \
-                   ask_yn(default='n', prompt='Aggregate all columns? '):
-                    if 'category' in agg_type:
-                        pmt = 'Select CATEGORY (Unique values to be COLUMNS in result table) >> '
-                        agg_options = {'cat_key_col':ask_select_column_index(table_in, prompt=pmt)}
-                    else:
-                        agg_options = {}
-                    pmt = 'Select AGGREGATION ATTRIBUTE COLUMN (Values of interest to process) >> '
-                    agg_col = ask_select_column_index(table_in, prompt=pmt)
-                    agg_name = '{} - {} - {}'.format(str(len(agg_specs)), agg_type,
-                                                     table_in[0][agg_col] if headers \
-                                                     else 'col'+str(agg_col))
-                    pmt = 'AGG NAME (columns to be formed by AGG NAME - CATEGORY) is <{}>. OK? '
-                    while not ask_yn(default='y', prompt=pmt.format(agg_name)):
-                        agg_name = input(\
-                            'Enter new AGG NAME (column headers in form AGG NAME - CATEGORY >> ')
-                    for key in att_agg_default_options[agg_type]:
-                        if key not in agg_options:
-                            agg_options[key] = att_agg_default_options[agg_type][key]
-                    _review_options(agg_options, table_in)
-                    new_spec = {'agg_type':agg_type, 'agg_col':agg_col, 'agg_options':agg_options,
-                                'agg_name':agg_name}
-                    agg_specs.append(new_spec)
-                else:
-                    agg_options = {key:att_agg_default_options[agg_type][key] \
-                                   for key in att_agg_default_options[agg_type]}
-                    _review_options(agg_options, table_in)
-                    for agg_col in range(len(table_in[0])):
-                        agg_name = '{} - {} - {}'.format(str(len(agg_specs)), agg_type,
-                                                         table_in[0][agg_col] \
-                                                         if headers else 'col'+str(agg_col))
-                        new_spec = {'agg_type':agg_type, 'agg_col':agg_col,
-                                    'agg_options':agg_options, 'agg_name':agg_name}
-                        agg_specs.append(new_spec)
-            except KeyboardInterrupt:
-                print('New aggregation spec cancelled. Press Ctrl+c again to stop altogether.')
-            if not ask_yn(default='y', prompt='Current agg. specs:\n {}; \n\nselect more?'.format(\
-                '\n'.join([item['agg_name'] for item in agg_specs]))):
-                break
-        _add_kwarg_to_last_command('agg_specs', str(agg_specs), fn_name='data_aggregate')
-    # Spec at hand, now the work starts..
+                        'empty_text':'-All empty-', 'strip':True},
+    'category-are-same':{'cat_key_col':-1, 'strip':True, 'not_found_text':'<No record found>'},
+    'category-min-text-length':{'cat_key_col':-1, 'strip':True,
+                                'non_text_message':'-Field(s) without text data-',
+                                'empty_text':'-All empty-'},
+    'category-max-text-length':{'cat_key_col':-1, 'strip':True,
+                                'non_text_message':'-Field(s) without text data-',
+                                'empty_text':'-All empty-'},
+    'category-avg-text-length':{'cat_key_col':-1, 'strip':True,
+                                'non_text_message':'-Field(s) without text data-',
+                                'empty_text':'-All empty-'},
+    'category-all-filled':{'cat_key_col':-1, 'strip':True},
+    'category-some-filled':{'cat_key_col':-1, 'strip':True},
+    'category-none-filled':{'cat_key_col':-1, 'strip':True},
+    }
+
+
+def _data_aggregate_core(table_in, headers, agg_key_col, agg_key_name, agg_specs):
+    '''Pure aggregation logic (no prompting/history side effects). Takes already-resolved
+    agg_specs (list of {'agg_type', 'agg_col', 'agg_options', 'agg_name'} dicts, as built by
+    data_aggregate()'s interactive spec-collection loop) and returns the aggregated result
+    table.'''
     ret_table = [table_in[0]] if headers else []
     agg_key_col_dict = {line[agg_key_col]:[] for index, line in enumerate(table_in) \
                         if index or not headers}
@@ -517,11 +531,7 @@ def data_aggregate(table_in, **kwargs):
             continue
         print('Warning: Aggregation type for spec <{}> not available. Skipping'.format(name))
 
-    if ass_var:
-        print('Aggregation complete. Assigning result table to variable <{}>.'.format(ass_var))
-    print('\n')
     return ret_table
-data_aggregate.desc = 'List of lists guided aggregation'
 
 
 def data_de_aggregate(table_in, **kwargs):
@@ -563,16 +573,25 @@ def data_de_aggregate(table_in, **kwargs):
     if 'delim' not in kwargs:
         _add_kwarg_to_last_command('delim', _quoted(delim), fn_name='data_de_aggregate')
     _strip = _kwarg_parse_prompt_bool('strip', default_val='True', **kwargs)
-    ret_table = [table_in[0]] if headers else []
     scope = table_in[1:] if headers else table_in
     print('Data records before de-aggregation: {}'.format(str(len(scope))))
-    for line in scope:
-        for val in str(line[agg_key_col]).split(delim):
-            ret_table.append(line[:agg_key_col] + \
-                             [val.strip() if isinstance(val, str) and _strip else val] + \
-                             line[agg_key_col + 1:])
+    ret_table = _data_de_aggregate_core(table_in, headers, agg_key_col, delim, _strip)
     print('Data records after de-aggregation: {}'.format(str(len(ret_table)-(1 if headers else 0))))
     if ass_var:
         print('De-aggregation complete. Assigning result table to variable <{}>.'.format(ass_var))
     return ret_table
 data_de_aggregate.desc = 'List of lists guided de-aggregation'
+
+
+def _data_de_aggregate_core(table_in, headers, agg_key_col, delim, strip):
+    '''Pure de-aggregation logic (no prompting/history side effects). Same contract as
+    the post-prompt body of data_de_aggregate(): explodes the delimited value in
+    agg_key_col into one row per delimited item.'''
+    ret_table = [table_in[0]] if headers else []
+    scope = table_in[1:] if headers else table_in
+    for line in scope:
+        for val in str(line[agg_key_col]).split(delim):
+            ret_table.append(line[:agg_key_col] +
+                             [val.strip() if isinstance(val, str) and strip else val] +
+                             line[agg_key_col + 1:])
+    return ret_table
