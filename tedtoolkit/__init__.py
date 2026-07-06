@@ -20,3 +20,10 @@ from .util import *
 from .clipboard import *
 from .introspect import *
 from .gui.dialogs import *
+from .io.xlsx import *
+from .io.csv import *
+from .io.txt import *
+from .tables.columns import *
+from .tables.preview import *
+from .tables.reconcile import *
+from .tables.join import *
