@@ -1,7 +1,21 @@
 ﻿# ted_toolkit.py: Swiss knife in python
 '''
-Required environment may be create in Anaconda with conda create -p "P:/Documents/localpython" python=3.12 pip openssl sqlite vc click openpyxl pyreadline3 chardet pywin32 six xlrd
+Required environment: see environment.yml (python=3.12; pyreadline3 depends on the classic
+CPython REPL, which 3.12 uses by default - 3.13's new _pyrepl console bypasses the readline
+hook this toolkit's history-rewrite mechanism depends on).
 
+This file is intentionally a thin interactive-session launcher, not the toolkit itself - the
+actual implementation lives in the tedtoolkit/ package (an installable, independently-testable
+package). This file does three things: (1) imports everything from tedtoolkit so the interactive
+session gets the same flat, bare-callable namespace the original single-file toolkit provided,
+(2) defines FUNCTION_CATEGORIES plus help_all()/save_function_reference()/help_vars()/
+_run_script()/continue_execution(), and (3) the __main__ entry point.
+
+help_all(), save_function_reference(), help_vars(), and _run_script() are kept here rather than
+in the tedtoolkit package ON PURPOSE: they inspect globals()/eval() names against the *interactive
+session's own namespace*, which is only correct when they live in whatever module is actually
+running as __main__. Moving them into a tedtoolkit submodule would make them introspect that
+submodule's namespace instead of the user's session - do not "clean this up" by relocating them.
 '''
 
 
@@ -56,6 +70,12 @@ FUNCTION_CATEGORIES = {
     'g_sel_file': 'User Input (GUI)',
     'g_sel_file_to_write': 'User Input (GUI)',
     'g_sel_folder': 'User Input (GUI)',
+    'g_ask_yn': 'User Input (GUI)',
+    'g_ask_okcancel': 'User Input (GUI)',
+    'g_conditional_stop': 'User Input (GUI)',
+    'g_show_info': 'User Input (GUI)',
+    'g_show_warning': 'User Input (GUI)',
+    'g_show_error': 'User Input (GUI)',
     'xlsx_export': 'Input / Output',
     'xlsx_import': 'Input / Output',
     'csv_export': 'Input / Output',
@@ -63,8 +83,6 @@ FUNCTION_CATEGORIES = {
     'data_export': 'Input / Output',
     'data_import': 'Input / Output',
     'ask_select_sheet': 'User Input (text)',
-    'data_import_plus': 'Input / Output',
-    'data_export_plus': 'Input / Output',
     'input': 'User Input (text)',
     'elapsed': 'Utilities & Settings',
     'win_copy': 'Input / Output',
@@ -115,22 +133,15 @@ def save_history():
     N.B. Obviously these *.py files are not intended to be executed independently of the toolkit.
     '''
     history = [readline.get_history_item(index)+'\n'
-               for index in range(1, readline.get_current_history_length())]
+               for index in range(1, readline.get_current_history_length() + 1)]
 
     filepath = g_sel_file_to_write(title='TED TOOLKIT: Select file to save session as script',
                                    filetypes=[('Python files', ('*.py')), ('All Files', ('*.*'))])
     if filepath[-3:] != '.py':
         filepath = filepath + '.py'
-    fil = open(filepath, 'w')
+    fil = open(filepath, 'w', encoding='utf-8')
     template = '# TED_TOOLKIT-based (v{}) Python script, autogen by {} at UTC:{}\n\n'
     template = template.format(VERSION, get_current_user(), get_utc_timestamp())
-    toolkit_check = [
-        'import os, sys, time\n',
-        f'originating_version = "{VERSION}"\n',
-        'if os.path.basename(sys.argv[0]) != "ted_toolkit.py": raise Exception("\\n\\n********This python file must be run from Ted\'s Toolkit. Canceling.********\\n")\n',
-        'if VERSION != originating_version: print(f"\\n*********************\\nWARNING: This toolkit script created with toolkit version {originating_version} but is being run in version {VERSION}.\\n*********************\\n\\n"); time.sleep(5)',
-        '\n'
-        ]
     fil.writelines([template]+history+['\n\n'])
     fil.close()
     print('History saved to: \n{}'.format(filepath))
@@ -215,7 +226,7 @@ def save_function_reference(**kwargs):
     return
 save_function_reference.desc = 'Export Toolkit Function Reference'
 
-def help_vars():
+def help_vars(exclude_globals=True):
     '''Shows the current variables that have been defines in the Python encieonment
     Includes int, float, bool, str, list, set, dict, datetime.datetime
     if exclude_globals is True, the function skips the listing of variables in ALL CAPS'''
