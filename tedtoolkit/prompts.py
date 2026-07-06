@@ -107,7 +107,7 @@ def ask_select(var_in, prompt='Select an index from the following:', print_keys=
             default_index = temp[0]
         else:
             default_index = 0
-            print(f'ask_select(): WARNING: default value passed to ask_select not found in var_in / setting first element as default.')
+            print('ask_select(): WARNING: default value passed to ask_select not found in var_in / setting first element as default.')
         selection = ask_num(allow_decimal=False, allow_negative=False, allow_default=True, default=default_index,
                             prompt=f'(enter for default value {default_index})#: ')
     if selection not in range(len(var_in)):

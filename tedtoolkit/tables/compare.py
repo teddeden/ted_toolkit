@@ -338,7 +338,7 @@ def _compare_columns_core(data, cols, compare_type, header_row=True,
                 else:
                     row.append(fail_text)
                 continue
-            elif compare_type == 'date':
+            if compare_type == 'date':
                 def to_str(dt):
                     return f'{dt.year}-{dt.month}-{dt.day}'
                 if convert_dates:

@@ -197,7 +197,7 @@ def _prev_s(item):
         return 'String: "{}...'.format(item[:58])
     if isinstance(item, int) or isinstance(item, float) or isinstance(item, bool):
         return str(item)
-    elif isinstance(item, list):
+    if isinstance(item, list):
         return 'List: ' + ', '.join([str(element) for element in item])[:60]
     elif isinstance(item, dict):
         return 'Dict: ' + ', '.join([str(element) for element in item])[:60]
