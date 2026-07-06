@@ -11,3 +11,4 @@ from .preview import *
 from .reconcile import *
 from .join import *
 from .aggregate import *
+from .compare import *
