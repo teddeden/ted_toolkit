@@ -256,10 +256,48 @@ def compare_columns(table, **kwargs):
                            consequences='If you click OK, the script will proceed without performing the column comparison.')
         return
 
-    #If execution continues here, the rows are the same length
-    row_length = list(row_lengths)[0]
+    _compare_columns_core(
+        data, cols, compare_type, header_row=header_row,
+        require_nonblank=require_nonblank if compare_type == 'text' else False,
+        case_sensitive=case_sensitive if compare_type == 'text' else True,
+        strip_text_fields=strip_text_fields if compare_type == 'text' else False,
+        convert_dates=convert_dates if compare_type == 'date' else False,
+        first_date_format=first_date_format if compare_type == 'date' else None,
+        second_date_format=second_date_format if compare_type == 'date' else None,
+        require_nonzero=require_nonzero if compare_type == 'numerical' else False,
+        conv_text_to_num=conv_text_to_num if compare_type == 'numerical' else False,
+        first_col_conv=first_col_conv if compare_type == 'numerical' else None,
+        tolerance=tolerance if compare_type == 'numerical' else 0,
+        pass_text=pass_text, error_text=error_text, fail_text=fail_text,
+        fail_text_blank=fail_text_blank if compare_type == 'text' and require_nonblank else 'FAIL_ALL_BLANK',
+        fail_text_nonzero=fail_text_nonzero if compare_type == 'numerical' and require_nonzero else 'FAIL_ALL_ZERO',
+        fail_detail=fail_detail, new_col_name=new_col_name, error_condition=error_condition,
+    )
+    print(f'compare_columns(): Completed comparison for "{new_col_name}"')
+    return
+compare_columns.desc = 'Guided; adds col with result'
 
-    #Main evaluation
+
+def _compare_columns_core(data, cols, compare_type, header_row=True,
+                          require_nonblank=False, case_sensitive=True, strip_text_fields=False,
+                          convert_dates=False, first_date_format=None, second_date_format=None,
+                          require_nonzero=False, conv_text_to_num=False,
+                          first_col_conv=None, tolerance=0,
+                          pass_text='PASS', error_text='ERROR', fail_text='FAIL',
+                          fail_text_blank='FAIL_ALL_BLANK', fail_text_nonzero='FAIL_ALL_ZERO',
+                          fail_detail=False, new_col_name='COMPARE', error_condition=''):
+    '''Pure decision logic (no prompting/history side effects). Mutates `data` in place
+    (appends a header cell + one result cell per row) and returns the same `data` object -
+    this mutate-and-return contract (not copy-and-return) is deliberate: existing/replayed
+    scripts call compare_columns(table) for its side effect and reference `table` afterward
+    expecting the new column to be there. On a fatal error, rolls back any partial mutation
+    before re-raising, matching compare_columns()'s existing behavior exactly.
+
+    The first_col_conv eval()-based user-transform-expression feature (numerical compare
+    only) is preserved exactly: this is an intentional, documented power-user capability,
+    not something to sandbox or remove.'''
+    pass_in_tolerance_text = f'{pass_text} (WITHIN TOLERANCE)'
+    row_length = len(data[0])
     try:
         data[0].append(new_col_name)
         for row_index, row in enumerate((data[1:] if header_row else data), start=1):
@@ -376,9 +414,7 @@ def compare_columns(table, **kwargs):
             while(len(line) > row_length):
                 _ = line.pop()
         raise exc
-    print(f'compare_columns(): Completed comparison for "{new_col_name}"')
-    return
-compare_columns.desc = 'Guided; adds col with result'
+    return data
 
 
 def pre_process_specs_detail(specs_detail):
