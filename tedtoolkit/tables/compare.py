@@ -1,10 +1,4 @@
-'''tedtoolkit.tables.compare - guided column-vs-column comparison (text/numeric/date).
-
-NOTE: compare_columns()/try_compare_columns() call g_ask_okcancel()/g_conditional_stop(),
-which are defined in tedtoolkit.gui.messagebox (added in Phase 3 of the refactor).
-Until that import is wired up, those specific failure paths remain exactly as broken
-as they were before this migration (NameError) - not a regression introduced here.
-'''
+'''tedtoolkit.tables.compare - guided column-vs-column comparison (text/numeric/date).'''
 
 import collections
 import datetime
@@ -13,6 +7,7 @@ from tedtoolkit.history import _add_kwarg_to_last_command, _quoted
 from tedtoolkit.prompts import (ask_select_column_index, _kwarg_parse_prompt_bool,
                                  _kwarg_parse_prompt_list, _kwarg_parse_prompt_str,
                                  _kwarg_parse_prompt_num)
+from tedtoolkit.gui.messagebox import g_ask_okcancel, g_conditional_stop
 from tedtoolkit.tables.reconcile import in_tolerance
 
 

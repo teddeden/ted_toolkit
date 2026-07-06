@@ -10,12 +10,8 @@ import os
 
 from tedtoolkit.history import _check_assignment, _add_kwarg_to_last_command, _quoted
 from tedtoolkit.gui.dialogs import g_sel_file
+from tedtoolkit.gui.messagebox import g_conditional_stop
 from tedtoolkit.util import get_local_timestamp
-# NOTE: dynamic_import() below calls g_conditional_stop() on a load failure.
-# That function is defined in tedtoolkit.gui.messagebox (added in Phase 3 of
-# the refactor); until then this mirrors today's pre-existing behavior where
-# g_conditional_stop is an undefined name, i.e. the failure path itself
-# raises NameError rather than silently swallowing the original exception.
 
 DYNAMIC_IMPORTS = {}
 
@@ -45,13 +41,11 @@ def dynamic_import(**kwargs):
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
     except Exception as exc:
-        res = g_conditional_stop(f'Error encountered loading the module at {file_path}: \n\n{str(exc)}',
-                                 consequences='Your module code will not be returned.\n'+
-                                              'Any steps based on this module will fail.')
-        if res:
-            return None
-        else:
-            raise exc
+        g_conditional_stop(f'Error encountered loading the module at {file_path}: \n\n{str(exc)}',
+                           title='dynamic_import(): Module Load Error',
+                           consequences='Your module code will not be returned.\n'+
+                                        'Any steps based on this module will fail.')
+        return None
     print(f'Code imported from {file_path}.')
     print(f'Access via dot notation e.g. {ass_var}.my_function()\n')
     DYNAMIC_IMPORTS[f'{module_name} [{get_local_timestamp()}]'] = [ass_var, file_path, mod.__doc__]
