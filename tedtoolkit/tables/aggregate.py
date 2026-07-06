@@ -82,6 +82,7 @@ def _arithmetic_stats(array, operator, options):
         if isinstance(item, str):
             try:
                 intermediate.append(float(item))
+                continue
             except ValueError:
                 if options['ignore_non_numbers'] or (len(item) == 0 and options['ignore_empty']):
                     continue
