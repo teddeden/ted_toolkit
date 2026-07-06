@@ -141,12 +141,6 @@ def save_history():
     return
 save_history.desc = 'Save interactive session to edit/re-run'
 
-def beep():
-    '''make a short beep (e.g. to let the user know that something is finished)'''
-    print('\a', end='')
-    return
-beep.desc = 'Windows chime'
-
 def help_all():
     '''print info for all public functions available in toolkit'''
     global DYNAMIC_IMPORTS
