@@ -19,13 +19,14 @@ import traceback
 import win32com.client
 import xlrd
 import zipfile
-from ted_toolkit import (_add_kwarg_to_last_command,
+from tedtoolkit.history import (_add_kwarg_to_last_command,
                          _remove_keyword_argument_from_last_command,
                          _check_assignment,
-                         _is_list_of_lists,
                          _get_last_command,
                          _quoted,
-                         _prompt_for_any_arg,
+                         )
+from tedtoolkit.validation import _is_list_of_lists
+from tedtoolkit.prompts import (_prompt_for_any_arg,
                          _prompt_for_bool_arg,
                          _prompt_for_list_arg,
                          ask_num,
@@ -49,97 +50,6 @@ MB_ICONS = {'error': messagebox.ERROR,
 
 MB_BUTTONS = {''
               }
-
-def ask_yn(default='no', prompt=''):
-    '''prompt for a yes/no answer; 
-    hit enter to use default value'''
-    default_yes = default.lower() in ('y', 'yes')
-    a_in = input(prompt + (' (Y/n): ' if default_yes else\
-                           ' (y/N): '))
-    if a_in[:3].lower() in ('y', 'yes') or \
-        (len(a_in) == 0 and default_yes):
-        return True
-    return False
-
-def _prompt_for_any_arg(arg_name, default_val, numeric=False):
-    '''prompts for arg_name value to be default_val; if user 
-       does not want to use default_val, user can specify any
-       value desired. If numeric is True, user is forced to enter
-       a numeric value and this will be converted to a float.  
-       Otherwise, response will be interpreted as test string'''
-    prompt = 'The argument <{}> is set to <{}>. Is this ok?'
-    if not ask_yn(default='y', prompt=prompt.format(arg_name,\
-        repr(default_val))):
-        ok = False
-        while not ok:
-            pmt = 'Enter new value for <{}> >>> '
-            user_in = input(pmt.format(arg_name))
-            if numeric:
-                try:
-                    user_in = float(user_in)
-                except ValueError:
-                    print('Error: you must enter a number.')
-                    continue
-            else:
-                user_in = eval('"{}"'.format(user_in))
-            ok = True
-        ret_val = user_in
-    else:
-        ret_val = default_val
-    print('<{}> has been set to <{}>.'.format(arg_name, 
-                                              repr(ret_val)))
-    return ret_val
-
-def _prompt_for_list_arg(arg_name, choices_list, 
-                         default_index=None):
-    '''prompts for arg_name which must be a selection from
-       the choices in choices_list.  If default_index is 
-       given, will first prompt user if this is ok.
-       Otherwise (or if it is not ok), user will see choice
-       selection and be given the option to choose.
-       Function returns selected value (not index).'''
-    if len(choices_list) == 0:
-        raise Exception('You must pass a nonempty choices_list')
-    if default_index is not None:
-        if default_index >= len(choices_list):
-            default_index = None
-            print('Warning: default_index beyond choices range!')
-    
-    if default_index is not None:
-        pmt = 'The argument <{}> is set to <{}>. Is this ok?'
-        if ask_yn(default='y', prompt=pmt.format(arg_name,\
-            choices_list[default_index])):
-            return choices_list[default_index]
-    print('For <{}> you have the following choices:'.format(\
-        arg_name))
-    for index, item in enumerate(choices_list):
-        print('{}:\t{}'.format(index, item))
-    ok = False
-    while not ok:
-        pmt = 'Select the index number of your choice for <{}>: '
-        user_in = input(pmt.format(arg_name))
-        try:
-            ret_val = choices_list[int(user_in)]
-        except ValueError:
-            print('You must enter the number of your choice.')
-            continue
-        except IndexError:
-            print('Your selection is out of range. Try again.')
-            continue
-        ok = True
-    print('<{}> has been set to <{}>.'.format(arg_name, ret_val))
-    return ret_val
-    
-def _prompt_for_bool_arg(arg_name, default_val=True):
-    '''prompts for arg_name which must be boolean'''
-    prompt = 'The argument <{}> is set to <{}>. Is this ok?'
-    if not ask_yn(default='y', prompt=prompt.format(arg_name,\
-        default_val)):
-        ret_val = not default_val
-    else:
-        ret_val = default_val
-    print('<{}> has been set to <{}>.'.format(arg_name, ret_val))
-    return ret_val
 
 def g_sel_file(**kwargs):
     '''Graphical file selection via tkinter; 
@@ -409,19 +319,6 @@ def _parse_csv_args(case, **kwargs):
             'quoting':quoting, 'convert_numbers':convert_numbers,
             'convert_dates':convert_dates, 
             'date_format':date_format}
-
-def _is_list_of_lists(var):
-    '''return true if list of lists, false if anything else'''
-    if isinstance(var, list):
-        if not var:
-            return False
-        for line in var:
-            if not isinstance(line, list):
-                return False
-        return True
-    else:
-        return False
-
 
 def csv_export(data, **kwargs):
     '''export list of lists as csv file

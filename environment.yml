@@ -1,0 +1,18 @@
+name: toolkit-env
+channels:
+  - defaults
+dependencies:
+  - python=3.12
+  - pip
+  - openssl
+  - sqlite
+  - vc
+  - click
+  - openpyxl
+  - pyreadline3
+  - chardet
+  - pywin32
+  - six
+  - xlrd
+  - pip:
+      - pytest
