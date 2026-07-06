@@ -15,6 +15,13 @@ from tedtoolkit.prompts import (ask_yn, ask_num, ask_select, ask_select_column_i
                                  _prompt_for_any_arg, _prompt_for_list_arg, _prompt_for_bool_arg,
                                  _kwarg_parse_prompt_str, _kwarg_parse_prompt_bool,
                                  _kwarg_parse_prompt_num, _kwarg_parse_prompt_list)
+from tedtoolkit.util import (elapsed, get_utc_timestamp, get_local_timestamp, get_current_user,
+                              _find_notepad_pp, beep, set_window_title)
+from tedtoolkit.clipboard import win_copy, win_paste, win_paste_table, win_copy_table
+from tedtoolkit.introspect import (dynamic_import, _get_function_declaration, _get_module_functions,
+                                    DYNAMIC_IMPORTS)
+from tedtoolkit.gui.dialogs import g_sel_file, g_sel_file_to_write, g_sel_folder
+from tedtoolkit.io.txt import read_txt
 
 from load_save import *
 
@@ -83,80 +90,8 @@ FUNCTION_CATEGORIES = {
     'continue_execution': 'Utilities & Settings'
     }
 
-DYNAMIC_IMPORTS = collections.OrderedDict()
-
 #start_history_size = readline.get_current_history_length()
 readline.add_history('#SCRIPT START')
-
-START_TIME = datetime.datetime.now()
-
-def elapsed():
-    '''Returns the time (in string format hh:mm:ss) siunce the START_TIME of the script'''
-    current = datetime.datetime.now()
-    delta = current - START_TIME
-    temp = str(delta)
-    decimal_position = temp.find('.')
-    return temp[:decimal_position]
-elapsed.desc = 'Returns time (str) since start'
-
-def win_copy(var_in):
-    '''Copies a variable as a string to the windows clipboard for pasting in another program
-    Full functionality via Windows API'''
-    var_in = str(var_in)
-    win32clipboard.OpenClipboard()
-    win32clipboard.EmptyClipboard()
-    win32clipboard.SetClipboardText(var_in)
-    win32clipboard.CloseClipboard()
-    return
-win_copy.desc = 'Copy to windows clipboard'
-
-def win_paste():
-    '''Copies a variable from the windows clipboard to a python variable (via return)
-    Full functionality via Windows API'''
-    win32clipboard.OpenClipboard()
-    data = win32clipboard.GetClipboardData()
-    win32clipboard.CloseClipboard()
-    return data
-win_paste.desc = 'Paste from clipboard (non-table)'
-
-def win_paste_table():
-    '''paste into python list the contents of excel table copied to windows clipboard'''
-    contents = win_paste().strip()
-    val = [item.split('\t') for item in contents.split('\r\n')]
-    func = lambda x: x if bool(set(x.strip()) - set('1234567890.')) else float(x.strip())
-    table = [[func(line[index].strip('"')) for index in range(len(line))] for line in val]
-    return table
-win_paste_table.desc = 'Paste from (excel) table'
-
-def win_copy_table(array):
-    '''take 2d array in and convert to a text string that excel can copy into cells, then copy'''
-    output_string = ''
-    for row in range(len(array)):
-        for col in range(len(array[row])):
-            output_string = output_string + str(array[row][col])
-            if col+1 in range(len(array[row])):
-                output_string = output_string + '\t'
-        output_string = output_string + '\r\n'
-    win_copy(output_string)
-win_copy_table.desc = 'Copy lists of lists table'
-
-def get_utc_timestamp():
-    """Get time stamp in UTC time """
-    local_time = datetime.datetime.now()
-    epoch_second = time.mktime(local_time.timetuple())
-    #utc_time = datetime.datetime.utcfromtimestamp(epoch_second)
-    utc_time = datetime.datetime.fromtimestamp(epoch_second, datetime.UTC)
-    return utc_time.strftime("%Y-%m-%d-%H-%M-%S")
-get_utc_timestamp.desc = 'UTC timestamp (str)'
-
-def get_local_timestamp():
-    '''Get time stamp in local time'''
-    local = datetime.datetime.now()
-    epoch_second = time.mktime(local.timetuple())
-    #utc_time = datetime.datetime.utcfromtimestamp(epoch_second)
-    local_time = datetime.datetime.fromtimestamp(epoch_second)
-    return local_time.strftime("%Y-%m-%d-%H-%M-%S")
-get_local_timestamp.desc = 'Local timestamp (str)'
 
 def _review_options(options_in, table_in):
     '''takes in dict of options, prompts the user to modify according to type, or confirm'''
@@ -2223,43 +2158,6 @@ def pre_process_specs_detail(specs_detail):
     return ret_dict
 pre_process_specs_detail.desc = 'Get specs ready for compare_columns()'
 
-def get_current_user():
-    '''Get current user logged in Windows User ID'''
-    try:
-        return os.environ.get('USERNAME').upper()
-    except AttributeError:
-        return 'Unknown User'
-get_current_user.desc = 'Current Windows User ID (str)'
-
-def _find_notepad_pp(initial_dir='c:/ProgramData/App-V'):
-    '''Returns path of Notepad++ if found
-    Otherwise returns None'''
-    standard_path = r"c:\Program Files\Notepad++"
-    try:
-        if os.path.isdir(standard_path):
-            if os.path.isfile(os.path.join(standard_path, 'notepad++.exe')):
-                return os.path.join(standard_path, 'notepad++.exe')
-        res = os.listdir(initial_dir)
-        for folder in res:
-            subpath = os.path.join(initial_dir, folder)
-            sublist = os.listdir(subpath)
-            if not sublist:
-                continue
-            sub_subpath = os.path.join(subpath, sublist[0])
-            if not os.path.isdir(sub_subpath):
-                continue
-            sub_sublist = os.listdir(sub_subpath)
-            if 'Root' not in sub_sublist:
-                continue
-            final_path = os.path.join(sub_subpath, 'Root')
-            if not os.path.isdir(final_path):
-                continue
-            if 'notepad++.exe' in os.listdir(final_path):
-                return os.path.join(final_path, 'notepad++.exe')
-    except:
-        return None
-    return None
-
 def save_history():
     '''Saves command history to a text file to enable easy later scripting of session
     INTENDED USAGE:
@@ -2306,108 +2204,13 @@ def beep():
     return
 beep.desc = 'Windows chime'
 
-def read_txt(**kwargs):
-    '''reads in a text file, returning list of strings found
-    kwargs:
-    - file_path (str, will prompt if not given)
-    - encoding (str, default utf-8)
-    '''
-    if 'file_path' in kwargs:
-        file_path = kwargs.get('file_path', '')
-        del kwargs['file_path']
-    else:
-        file_path = g_sel_file(**kwargs)
-    if not file_path:
-        return None
-    if 'encoding' not in kwargs:
-        kwargs['encoding'] = 'utf-8'
-    fil = codecs.open(file_path, **kwargs)
-    data = list(fil)
-    fil.close()
-    return data
-read_txt.desc = 'Import text file'
-
-def dynamic_import(**kwargs):
-    '''import a Python module from an aribitrary file in Python
-    kwargs:
-    - file_path (will prompt if not given)
-    Usage:
-        mod = dynamic_import(file_path='c:/temp/pythonfile.py') #prompts for path if not given
-    Above usage functionally equivalent to:
-        import pythonfile as mod
-    (except that the pythonfile can be anywhere and not necessarily in the toolkit folder / path)
-    '''
-    global DYNAMIC_IMPORTS
-    ass_var = _check_assignment(function_name='dynamic_import')
-    file_path = kwargs.get('file_path', '')
-    if not file_path or not os.path.isfile(file_path):
-        file_path = g_sel_file(title='Select the Python module to dynamically load.',
-                               filetypes=[('Python Module', ('*.py', '*.pyw'))])
-    if 'file_path' not in kwargs:
-        _add_kwarg_to_last_command('file_path', _quoted(file_path), fn_name='dynamic_import')
-    file_name = os.path.split(file_path)[1]
-    module_name = f'{file_name[:file_name.rfind(".")]}'
-    try:
-        spec = importlib.util.spec_from_file_location(module_name, file_path)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-    except Exception as exc:
-        res = g_conditional_stop(f'Error encountered loading the module at {file_path}: \n\n{str(exc)}',
-                                 consequences='Your module code will not be returned.\n'+
-                                              'Any steps based on this module will fail.')
-        if res:
-            return None
-        else:
-            raise exc
-    print(f'Code imported from {file_path}.')
-    print(f'Access via dot notation e.g. {ass_var}.my_function()\n')
-    DYNAMIC_IMPORTS[f'{module_name} [{get_local_timestamp()}]'] = [ass_var, file_path, mod.__doc__]
-    return mod
-dynamic_import.desc = 'Dynamically load a Python module'
-
-def _get_function_declaration(fn_name):
-    '''return function declaation string given a function name'''
-    try:
-        source = inspect.getsource(eval(fn_name))
-    except OSError as exc:
-        if str(exc) == 'could not get source code':
-            source = f'def {fn_name}(...?...):'
-        else:
-            raise exc
-    if not source:
-        return ''
-    return source.split('\n')[0].strip()
-
-def _get_module_functions(module):
-    '''return list of lists with functions found in a loaded module:
-    [[Function definition, First line of function docstring]]'''
-    ret_table = [['Function', 'Description']]
-    function_names = [f'module.{key}' for key in dir(module) \
-                      if key[0] != '_' and inspect.isfunction(eval(f'module.{key}'))]
-    for name in function_names:
-        try:
-            definition = inspect.getsource(eval(name)).strip()
-            if definition[:4] == 'def ':
-                definition = definition[4:]
-            definition = definition[:definition.find(':')]
-        except OSError:
-            definition = f'{name}(...?...)'
-        try:
-            desc = eval(f'{name}.__doc__')
-            if '\n' in desc:
-                desc = desc[:desc.find('\n')]
-        except:
-            desc = '-no description available-'
-        ret_table.append([definition, desc])
-    return ret_table
-
 def help_all():
     '''print info for all public functions available in toolkit'''
     global DYNAMIC_IMPORTS
     MAIN_SPACE = 50
     temp = globals()
     master_list = [key for key in temp if inspect.isfunction(eval(key)) and key[0] != '_']
-    fns = [_get_function_declaration(item) for item in master_list]
+    fns = [_get_function_declaration(item, temp) for item in master_list]
     fns = [item for item in fns if item[:3] == 'def']
     fns = [item[4:].strip() for item in fns]
     fns.sort()
@@ -2454,7 +2257,7 @@ def save_function_reference(**kwargs):
     '''
     temp = globals()
     master_list = [key for key in temp if inspect.isfunction(eval(key)) and key[0] != '_']
-    fns = [_get_function_declaration(item) for item in master_list]
+    fns = [_get_function_declaration(item, temp) for item in master_list]
     fns = [item for item in fns if item[:3] == 'def']
     fns = [item[4:].strip() for item in fns]
     fns.sort()
@@ -2509,18 +2312,6 @@ def help_vars():
     print('\n')
     return
 help_vars.desc = 'Show all current variables of common types'
-
-def set_window_title(text, include_timestamp=None):
-    '''Set title of command prompt window.
-    include_timestamp may be None, "UTC", or "LOCAL" '''
-    if include_timestamp == 'UTC':
-        title_string = f'title {get_utc_timestamp()}: {text}'
-    elif include_timestamp == 'LOCAL':
-        title_string = f'title {get_local_timestamp()}: {text}'
-    else:
-        title_string = f'title {text}'
-    os.system(title_string)
-set_window_title.desc = 'Set title of command line window'
 
 LAST_LINE_ATTEMPTED = -1
 
