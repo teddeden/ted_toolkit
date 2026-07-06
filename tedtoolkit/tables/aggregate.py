@@ -10,7 +10,6 @@ from tedtoolkit.prompts import (ask_yn, ask_select, ask_select_column_index,
 
 def _review_options(options_in, table_in):
     '''takes in dict of options, prompts the user to modify according to type, or confirm'''
-    CAT_PROMPT = 'Which column to use as category? \n(each value found will get own column) >> '
     for key in options_in:
         if key in ['cat_key_col']:
             continue
@@ -24,7 +23,6 @@ def _review_options(options_in, table_in):
                 key, options_in[key])):
                 options_in[key] = input('Type new string to use for <{}> >>'.format(key))
             continue
-    return
 
 
 def _add_values(ret_table, val_dict, title):
@@ -65,9 +63,9 @@ def _bool_calc(array, operator, options):
         return ''
     temp = {'and':True, 'or':False}[operator]
     for item in intermediate:
-        if item == True and operator == 'or':
+        if item is True and operator == 'or':
             temp = True
-        if item == False and operator == 'and':
+        if item is False and operator == 'and':
             temp = False
     return temp
 

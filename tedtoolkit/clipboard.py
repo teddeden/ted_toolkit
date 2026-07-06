@@ -11,7 +11,6 @@ def win_copy(var_in):
     win32clipboard.EmptyClipboard()
     win32clipboard.SetClipboardText(var_in)
     win32clipboard.CloseClipboard()
-    return
 win_copy.desc = 'Copy to windows clipboard'
 
 
@@ -29,7 +28,8 @@ def win_paste_table():
     '''paste into python list the contents of excel table copied to windows clipboard'''
     contents = win_paste().strip()
     val = [item.split('\t') for item in contents.split('\r\n')]
-    func = lambda x: x if bool(set(x.strip()) - set('1234567890.')) else float(x.strip())
+    def func(x):
+        return x if bool(set(x.strip()) - set('1234567890.')) else float(x.strip())
     table = [[func(line[index].strip('"')) for index in range(len(line))] for line in val]
     return table
 win_paste_table.desc = 'Paste from (excel) table'

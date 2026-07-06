@@ -13,6 +13,6 @@ dependencies:
   - chardet
   - pywin32
   - six
-  - xlrd
   - pip:
       - pytest
+      - pylint

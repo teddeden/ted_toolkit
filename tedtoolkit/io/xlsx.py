@@ -84,7 +84,7 @@ def _xlsx_export_core(data_dict, file_path, wb_filter, view_in_excel):
     {sheet_name: list-of-lists}; file_path/wb_filter/view_in_excel already resolved.'''
     wbk = openpyxl.Workbook(write_only=not wb_filter)
     existing_sheets = [name for name in wbk.sheetnames] #should be none is not using filter
-    for index, sheetname in enumerate(data_dict):
+    for sheetname in data_dict:
         wst = wbk.create_sheet(sheetname)
         print('Exporting sheet {}...'.format(sheetname[:31]))
         with click.progressbar(data_dict[sheetname],
@@ -104,7 +104,6 @@ def _xlsx_export_core(data_dict, file_path, wb_filter, view_in_excel):
         excel = win32com.client.dynamic.Dispatch('excel.application')
         _ = excel.Workbooks.Open(file_path)
         excel.Visible = True
-    return
 
 
 def xlsx_import(**kwargs):
@@ -131,9 +130,10 @@ def xlsx_import(**kwargs):
 def _xlsx_import_core(file_path, include_formulas, override_ro):
     '''Pure xlsx-reading logic (no GUI, no prompting). file_path already resolved.'''
     ro = not override_ro
-    fn = lambda line: [item.value for item in line]
+    def fn(line):
+        return [item.value for item in line]
     data_in = openpyxl.load_workbook(file_path, read_only=ro,
-        data_only=(not include_formulas))
+        data_only=not include_formulas)
     print('Reading workbook at path: {}'.format(file_path))
     ret_dict = collections.OrderedDict()
     for sheet_name in data_in.sheetnames:
@@ -149,7 +149,7 @@ def ask_select_sheet(dict_in, prompt='Select a sheet to import', include_all=Tru
     '''Prompt for selecting a sheet from a dict of Excel sheets, or else choosing all sheets'''
     if not isinstance(dict_in, dict):
         raise Exception('ERROR: ask_select_sheet() called without a dict of sheets as input!')
-    if len(dict_in) == 1 and include_all == False:
+    if len(dict_in) == 1 and not include_all:
         print(f'Only 1 sheet available: selecting it as default: {list(dict_in.keys())[0]}')
         return list(dict_in.keys())[0]
     print(prompt+'\n')

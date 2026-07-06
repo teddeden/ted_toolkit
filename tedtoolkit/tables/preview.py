@@ -62,7 +62,6 @@ def _guess_var(calling_function):
     '''returns the best guess of what variable the user would like to execute the function on
     used by e.g. data_preview()'''
     last = _get_previous_command()
-    curr = _get_last_command()
     ass_pos = last.find('=')
     col_pos = last.find(':')
     app_pos = last.find('.append(')
@@ -116,7 +115,7 @@ def _guess_var(calling_function):
     # module's own globals - _guess_var() only makes sense relative to
     # whatever namespace the user is actually typing commands into.
     caller_globals = sys._getframe(2).f_globals
-    if ass_var != None and len(ass_var) and ass_var in caller_globals:
+    if ass_var is not None and len(ass_var) and ass_var in caller_globals:
         return ass_var
     print('Ambiguous variable {}; {} canceled'.format(
         ass_var, calling_function))
@@ -140,12 +139,11 @@ def data_preview(data_in=None, **kwargs):
         if var_name:
             print(f'\nPreviewing ****  {var_name}  ****\n')
     else:
-        if data_in == None:
+        if data_in is None:
             ass_var = _guess_var('data_preview')
-            if ass_var == None:
+            if ass_var is None:
                 return
-            else:
-                data_in = sys._getframe(1).f_globals.get(ass_var)
+            data_in = sys._getframe(1).f_globals.get(ass_var)
         else:
             cmd = _get_last_command()
             ass_var = cmd[cmd.find('(')+1:cmd.find(')')]

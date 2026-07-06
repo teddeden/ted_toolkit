@@ -50,7 +50,6 @@ def key_analysis(left_keys, right_keys, negative_list=None):
     left_unique, left_non_unique = single_col_analysis(left_keys)
     print('KEY ANALYSIS: ANALYZING JOIN KEYS')
     right_unique, right_non_unique = single_col_analysis(right_keys)
-    neg_list = list(nset)
 
     lset, rset = set(left_keys), set(right_keys)
     luset, lnset, ruset, rnset = set(left_unique), set(left_non_unique), set(right_unique),\
@@ -273,14 +272,14 @@ def data_recon(orig_table, new_table, **kwargs):
                     del kwargs['columns']
             else: #col_mode == 'POSITION'
                 temp_cols = []
-                for (lcol, rcol, type) in columns:
+                for (lcol, rcol, cmp_type) in columns:
                     err_text = 'Column {} out of range of {} table; skipping spec.'
                     if lcol > -1 and lcol not in range(len(orig_table[0])):
                         column_errors.append(err_text.format(lcol, 'original'))
                     elif rcol > -1 and rcol not in range(len(new_table[0])):
                         column_errors.append(err_text.format(rcol, 'new'))
                     else:
-                        temp_cols.append((lcol, rcol, type))
+                        temp_cols.append((lcol, rcol, cmp_type))
                 if not temp_cols:
                     del kwargs['columns']
                 else:
@@ -432,7 +431,7 @@ def reconcile(orig_table, new_table, **kwargs):
     columns = kwargs.get('columns', None)
     tolerance = kwargs.get('tolerance', 0)
     in_tolerance_text = kwargs.get('in_tolerance_text', '--')
-    if columns == None:
+    if columns is None:
         columns = []
         for index in range(max(len(orig_table[0]), len(new_table[0]))):
             columns.append((index if index < len(orig_table[0]) else -1,
@@ -441,7 +440,8 @@ def reconcile(orig_table, new_table, **kwargs):
 
     #Prepare input tables according to strip value
     print('Preparing input tables (strip if necessary)...')
-    txt_strip = lambda input: input if not isinstance(input, str) else input.strip()
+    def txt_strip(val):
+        return val if not isinstance(val, str) else val.strip()
     left = orig_table if not strip else [[txt_strip(item) for item in line] for line in orig_table]
     right = new_table if not strip else [[txt_strip(item) for item in line] for line in new_table]
 

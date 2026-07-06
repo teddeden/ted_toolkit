@@ -19,7 +19,13 @@ submodule's namespace instead of the user's session - do not "clean this up" by 
 '''
 
 
-VERSION = "0.69c"
+import datetime
+import inspect
+import os
+import readline
+import subprocess
+import sys
+import traceback
 
 from tedtoolkit.history import (input, _quoted, _get_last_command, _get_previous_command,
                                  _add_kwarg_to_last_command,
@@ -50,18 +56,7 @@ from tedtoolkit.io.dispatch import data_import, data_export
 from tedtoolkit.gui.messagebox import (g_ask_yn, g_ask_okcancel, g_conditional_stop,
                                         g_show_info, g_show_warning, g_show_error)
 
-import codecs
-import collections
-import datetime
-import importlib.util
-import inspect
-import os
-import readline
-import time
-import traceback
-import subprocess
-import sys
-import win32clipboard
+VERSION = "0.69c"
 
 FUNCTION_CATEGORIES = {
     'ask_num': 'User Input (text)',
@@ -152,7 +147,6 @@ def save_history():
             subprocess.Popen([nppp_path, filepath])
         else:
             subprocess.Popen(['notepad.exe', filepath])
-    return
 save_history.desc = 'Save interactive session to edit/re-run'
 
 def help_all():
@@ -212,18 +206,18 @@ def save_function_reference(**kwargs):
     fns = [item for item in fns if item[:3] == 'def']
     fns = [item[4:].strip() for item in fns]
     fns.sort()
-    get_name = lambda func: func[:func.find('(')]
+    def get_name(func):
+        return func[:func.find('(')]
     lookup_cat = FUNCTION_CATEGORIES
-    table = [[lookup_cat.get(get_name(func), '**no category**'), 
-              get_name(func), 
-              getattr(eval(get_name(func)), 'desc', '--no short description--'), 
-              func, 
+    table = [[lookup_cat.get(get_name(func), '**no category**'),
+              get_name(func),
+              getattr(eval(get_name(func)), 'desc', '--no short description--'),
+              func,
               eval(f"{get_name(func)}.__doc__")]\
              for func in fns]
     table.sort(key=lambda line: line[0])
     table.insert(0, ['Category', 'Name', 'Short Description', 'Definition', 'Long Description'])
     xlsx_export({f'Toolkit Functions {VERSION}':table}, wb_filter=True, view_in_excel=True)
-    return
 save_function_reference.desc = 'Export Toolkit Function Reference'
 
 def help_vars(exclude_globals=True):
@@ -249,7 +243,7 @@ def help_vars(exclude_globals=True):
             var_name = DYNAMIC_IMPORTS[mod_name][0]
             try:
                 mod_vars = [item for item in dir(eval(var_name)) if isinstance(eval(f"{var_name}.{item}"), (int, float, bool, str, list, set, dict, datetime.datetime)) and item[0] != '_']
-            except:
+            except Exception:
                 continue
             for item in mod_vars:
                 if item.isupper() and exclude_globals:
@@ -261,12 +255,11 @@ def help_vars(exclude_globals=True):
                 preview = str(repr(ref))
                 print(f'  {handle[:23]:<23}{spacer}{item_type[:18]:<18} {preview[:40]:<40}')
     print('\n')
-    return
 help_vars.desc = 'Show all current variables of common types'
 
 LAST_LINE_ATTEMPTED = -1
 
-def _run_script(ARGS, **kwargs):
+def _run_script(args_list, **kwargs):
     '''takes saved history and re-runs it'''
     global LAST_LINE_ATTEMPTED
     cntd = kwargs.get('continued', False)
@@ -276,7 +269,7 @@ def _run_script(ARGS, **kwargs):
         _ = os.system('cls')
         print('\nExecuting recorded history from prior Python session\n\n'+\
               'To cancel, press Ctrl+c.\n')
-    py_file = ARGS[0]
+    py_file = args_list[0]
     print('File: ', py_file, '\n')
     if not cntd:
         #os.system(f'title {get_utc_timestamp()}: {py_file}')
@@ -334,9 +327,13 @@ def continue_execution():
     _run_script(sys.argv[1:], continued=True)
 continue_execution.desc = 'Restart script execution post-error'
 
+# Defined unconditionally (not just inside `if __name__ == '__main__':`) so continue_execution()
+# can safely reference ARGS even if ted_toolkit.py is ever imported as a regular module instead
+# of run as the entry script.
+ARGS = sys.argv[1:]
+
 if __name__ == '__main__':
     # for usage as a main module
-    ARGS = sys.argv[1:]
     if ARGS:
         if ARGS[0][-3:] == '.py' and os.path.exists(ARGS[0]):
             pass
@@ -360,5 +357,3 @@ if __name__ == '__main__':
         del title
     if ARGS:
         _run_script(ARGS, view_comments=True)
-
-

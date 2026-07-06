@@ -135,8 +135,8 @@ def _process_line(line, convert_numbers, convert_dates,
     convert_numbers = True if numbers should be converted
     pass string date_format to specify which format may be
     converted (will be ignored if convert_dates == False'''
-    if date_format == None:
-        date_format = ('%Y-%m-%d %H:%M:%S.%f')
+    if date_format is None:
+        date_format = '%Y-%m-%d %H:%M:%S.%f'
     ret_line = []
     for item in line:
         if convert_numbers:

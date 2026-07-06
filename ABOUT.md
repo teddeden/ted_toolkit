@@ -1,0 +1,158 @@
+# About Ted's Toolkit
+
+This document is for a developer who needs to get productive in this codebase quickly. It
+explains what the toolkit does, how the interactive session model works (the part that looks
+strangest on first read), what's in each module, and what's known-broken or known-missing.
+
+For contribution rules (git workflow, versioning, linting), see [CLAUDE.md](CLAUDE.md).
+
+## What this is
+
+Ted's Toolkit is a personal, Windows-only, interactive Python CLI for data analysis and
+transformation — pivoting, joining, reconciling, and comparing tabular data without leaving a
+Python prompt, and without pandas. Tables are plain **lists of lists**: `[[header1, header2],
+[row1col1, row1col2], ...]`. This is deliberate, not a legacy gap — lists of lists are considered
+more intuitive than a DataFrame for this tool's intended use, and no PR should introduce pandas.
+
+It's launched by double-clicking (or running) `start_ted_toolkit.bat`, which activates the
+`toolkit-env` conda environment and runs `python -i ted_toolkit.py`. The `-i` flag is essential:
+it runs the script to load every function into the global namespace, then drops into an
+interactive `>>>` prompt in that same namespace — so every function in the toolkit is callable
+bare, by name, with no imports, exactly like a beefed-up calculator.
+
+## The core interaction pattern (read this before touching any "guided" function)
+
+This is the one idea that makes the rest of the codebase make sense.
+
+Most of the toolkit's real functions (`data_aggregate`, `data_join`, `compare_columns`, `reconcile`,
+`data_import`, ...) are **guided**: you call them with as few or as many arguments as you already
+know, and they interactively prompt you for whatever's missing.
+
+```
+>>> x = data_de_aggregate(my_table)
+Does your data contain headers? (Y/n):
+```
+
+Here's the part that's easy to miss: **after you answer the prompts, the toolkit doesn't just use
+your answer — it rewrites the command you already typed**, splicing your answer in as a keyword
+argument, using Python's `readline` history buffer (via `pyreadline3` on Windows). If you press
+the ↑ (up-arrow) key after the prompts finish, you won't see `data_de_aggregate(my_table)` — you'll
+see something like:
+
+```
+x = data_de_aggregate(my_table, headers=True, aggregation_key_col=2, delim=', ')
+```
+
+fully filled in, ready to re-run without any prompts. This is the entire point of the tool: you
+work interactively once, and `save_history()` then dumps your whole rewritten session to a `.py`
+file — a fully-parameterized, non-interactive script that reproduces the same analysis. That
+script can later be replayed with `_run_script()` (triggered by passing the script's path as an
+argument to `ted_toolkit.py`) with zero prompts.
+
+This means:
+- **A guided function's public name and call signature are a durable contract.** A previously
+  saved script has a hardcoded call to that exact name with that exact keyword. Renaming a
+  parameter, or changing what a bare call does, breaks every script anyone has ever saved.
+- **Every guided function follows the same internal shape**: resolve each parameter via
+  `kwargs.get(...)` or a `_kwarg_parse_prompt_*` helper (which prompts only if the kwarg wasn't
+  already given, then calls `_add_kwarg_to_last_command()` to bake the answer into the history
+  line), then run the actual logic.
+- **The actual logic is split out into a pure `_<name>_core` function.** This was added during the
+  2026 refactor specifically so the logic could be unit-tested without needing a live, seeded
+  `readline` history. `_data_de_aggregate_core()` next to `data_de_aggregate()` in
+  `tedtoolkit/tables/aggregate.py` is the simplest example to read first.
+
+## Package layout
+
+```
+toolkit/
+├── start_ted_toolkit.bat     launcher: activates conda env, runs `python -i ted_toolkit.py`
+├── environment.yml           conda environment spec (python=3.12, pinned - see CLAUDE.md)
+├── ted_toolkit.py            thin session launcher - see its own module docstring
+├── tedtoolkit/                the actual package
+│   ├── history.py             readline history-rewrite primitives (input(), _add_kwarg_to_last_command, _check_assignment, ...)
+│   ├── validation.py          table-shape checks (_is_list_of_lists, _check_var_table)
+│   ├── prompts.py             console prompt primitives (ask_yn, ask_num, ask_select, ...) and the _kwarg_parse_prompt_* wrappers
+│   ├── util.py                elapsed(), timestamps, get_current_user, beep, set_window_title
+│   ├── clipboard.py           Windows clipboard I/O (win_copy/win_paste/*_table)
+│   ├── introspect.py          dynamic_import() and the function-reference helpers help_all()/save_function_reference() build on
+│   ├── gui/
+│   │   ├── dialogs.py          tkinter file/folder picker dialogs (g_sel_file, g_sel_file_to_write, g_sel_folder)
+│   │   └── messagebox.py       tkinter messagebox wrappers (g_ask_yn, g_ask_okcancel, g_conditional_stop, g_show_*)
+│   ├── io/
+│   │   ├── xlsx.py             Excel import/export (openpyxl) + core split, ask_select_sheet
+│   │   ├── csv.py              CSV import/export + core split, _parse_csv_args
+│   │   ├── txt.py              plain text import/export
+│   │   └── dispatch.py         consolidated data_import()/data_export() (xlsx/csv/txt, format auto-detected from extension)
+│   └── tables/
+│       ├── columns.py          single-column extraction, Excel column-letter conversion
+│       ├── preview.py          data_preview(), single_col_analysis(), the _guess_var() heuristic
+│       ├── aggregate.py         data_aggregate()/data_de_aggregate() + cores (the pivot/aggregation engine)
+│       ├── join.py              data_join() + core (key-based table join)
+│       ├── reconcile.py         key_analysis(), reconcile(), data_recon() (two-table diff engine)
+│       └── compare.py           compare_columns()/try_compare_columns() + core (column-vs-column comparison)
+└── tests/                      pytest suite, mirrors tedtoolkit/ by theme - see CLAUDE.md
+```
+
+`ted_toolkit.py` re-exports everything from `tedtoolkit` (`from tedtoolkit import *` plus a few
+explicit imports) so the interactive namespace looks exactly like one flat module, matching the
+original single-file design. `FUNCTION_CATEGORIES` (a dict in `ted_toolkit.py`) drives
+`help_all()`'s categorized function listing — add new public functions there when you add them.
+
+## Why `help_all()`/`help_vars()`/`_run_script()` live in `ted_toolkit.py`, not the package
+
+These functions call bare `globals()`/`eval(name)` against **whatever module is running as
+`__main__`** — i.e., the interactive session's own namespace, so they can see variables and
+functions the user typed at the prompt. If they lived inside a `tedtoolkit` submodule, `globals()`
+there would return that submodule's namespace instead, and they'd stop seeing anything the user
+actually defined. This is a namespace-binding requirement, not a style choice — don't "clean this
+up" by moving them into the package.
+
+## Data import/export
+
+`data_import()`/`data_export()` in `tedtoolkit/io/dispatch.py` are the blessed entry points —
+they auto-detect xlsx/csv/txt from the file extension (prompting if ambiguous), support Excel
+sheet selection, and are fully scriptable via kwargs with GUI-prompt fallback when kwargs are
+missing. `xlsx_import`/`xlsx_export`/`csv_import`/`csv_export` remain public (not just internal
+helpers) since existing saved scripts may call them directly for their non-prompting return
+shapes. **Zip/password-protected CSV import was deliberately dropped** during the 2026 refactor
+(it was already broken — Python-2-only code) and is not coming back without a specific ask.
+
+## Known gaps (do not silently "fix" these — see CLAUDE.md's bug-fix philosophy)
+
+- **`data_recon()`'s `col_select='LIST'` path is incomplete.** It calls `_sel_compare_cols()`
+  (when no `columns` kwarg is given) and, in `col_mode='NAME'`, `_check_convert_text_cols()` — a
+  function that translates name-based column specs to indices. **Neither function exists
+  anywhere in this codebase.** This was discovered during the 2026 refactor; there's no removed/
+  commented-out reference implementation to restore, so nothing was invented. `col_select` values
+  `'AUTO-OR'`/`'AUTO-AND'` work fully; `'LIST'` with `col_mode='POSITION'` and `columns` already
+  supplied as a kwarg also works. If you need the `'LIST'` + missing-columns or `'LIST'` +
+  `'NAME'` paths, you'll need to design and implement `_sel_compare_cols()`/
+  `_check_convert_text_cols()` from scratch — ask the user what behavior they actually want first.
+
+## Do-not-touch list
+
+- The `eval()`/`exec()` usages that are load-bearing to the design: `_run_script()`'s replay
+  `exec()`, `compare_columns()`'s `first_col_conv` user-transform-expression `eval()`, and the
+  `help_all()`/`help_vars()` introspection `eval(name)` calls. These are intentional features, not
+  bugs — see CLAUDE.md.
+- `compare_columns()`'s in-place mutate-and-return contract (it mutates the `data` argument and
+  returns the same object, rather than returning a copy). Existing/replayed scripts depend on the
+  mutation being visible on the original variable afterward.
+- The interactive prompt wording, prompt order, and default values of any guided function — these
+  are UI/UX, not implementation detail.
+
+## Testing and what can't be automated
+
+See CLAUDE.md for how to run the suite (`regression_test.bat`). The generated report always calls
+out what the automated suite structurally cannot exercise:
+- Real keystroke capture and ↑-arrow history recall (`pyreadline3` hooks the Windows console
+  directly — there is no way to simulate this from a non-interactive test process). This was
+  verified manually once, by hand, in a real terminal, after the Python 3.12 environment pin.
+- tkinter file/folder dialogs and messagebox popups (`g_sel_file*`, `g_ask_*`, `g_show_*`) —
+  these are one-line wrappers around blocking native dialogs; not unit tested by design.
+- Excel COM automation (`view_in_excel=True` opening a real Excel window via `win32com`).
+- Windows clipboard I/O (`win_copy`/`win_paste`/`*_table`).
+
+Everything else — every guided function's core logic, the full xlsx/csv/txt import/export round
+trip, the history-rewrite/kwarg-baking contract — is covered by the automated `pytest` suite.
