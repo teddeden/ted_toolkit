@@ -80,10 +80,8 @@ def _add_kwarg_to_last_command(keyword, value, fn_name=''):
         _replace_arbitrary_history_item(line_index - 1,
             current[:rpos] + str(keyword) + '=' + str(value) + current[rpos:])
         return
-    else:
-        _replace_arbitrary_history_item(line_index - 1,
-            current[:rpos]+', '+str(keyword) + '=' + str(value) + current[rpos:])
-        return
+    _replace_arbitrary_history_item(line_index - 1,
+        current[:rpos]+', '+str(keyword) + '=' + str(value) + current[rpos:])
 
 
 def _remove_keyword_argument_from_last_command(keyword):

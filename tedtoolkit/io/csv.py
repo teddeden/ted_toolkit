@@ -148,9 +148,8 @@ def _process_line(line, convert_numbers, convert_dates,
                 if item == int(item):
                     ret_line.append(int(item))
                     continue
-                else:
-                    ret_line.append(item)
-                    continue
+                ret_line.append(item)
+                continue
         #don't need an else because prev. cases continued
         if convert_dates:
             try:

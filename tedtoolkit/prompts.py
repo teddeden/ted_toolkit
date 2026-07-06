@@ -69,8 +69,7 @@ def ask_num(**kwargs):
             if abc - int(abc) != 0:
                 print('Invalid input. You must enter an integer (decimal values not allowed).')
                 continue
-            else:
-                return int(abc)
+            return int(abc)
         break
     return abc
 ask_num.desc = 'user prompt: number'
@@ -282,8 +281,7 @@ def _kwarg_parse_prompt_list(var_name, choices_list, **kwargs):
     if var_name in kwargs:
         if kwargs[var_name] in choices_list:
             return kwargs[var_name]
-        else:
-            overwrite = True
+        overwrite = True
     val = ask_select(choices_list, prompt=f'for <{var_name}> please choose an option:', orig_out=True)
     if overwrite:
         _remove_keyword_argument_from_last_command(var_name)

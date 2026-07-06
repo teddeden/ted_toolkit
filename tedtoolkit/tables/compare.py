@@ -332,12 +332,12 @@ def _compare_columns_core(data, cols, compare_type, header_row=True,
                     else:
                         row.append(pass_text)
                     continue
-                else: #test fail
-                    if fail_detail:
-                        row.append(f'{fail_text}: {data_points[0]} -> {data_points[1]}')
-                    else:
-                        row.append(fail_text)
-                    continue
+                #test fail
+                if fail_detail:
+                    row.append(f'{fail_text}: {data_points[0]} -> {data_points[1]}')
+                else:
+                    row.append(fail_text)
+                continue
             elif compare_type == 'date':
                 def to_str(dt):
                     return f'{dt.year}-{dt.month}-{dt.day}'
@@ -356,12 +356,11 @@ def _compare_columns_core(data, cols, compare_type, header_row=True,
                 if all([data_points[0].year == data_points[1].year, data_points[0].month == data_points[1].month, data_points[0].day == data_points[1].day]):
                     row.append(pass_text)
                     continue
+                if fail_detail:
+                    row.append(f'{fail_text}: {to_str(data_points[0])} -> {to_str(data_points[1])}')
                 else:
-                    if fail_detail:
-                        row.append(f'{fail_text}: {to_str(data_points[0])} -> {to_str(data_points[1])}')
-                    else:
-                        row.append(fail_text)
-                    continue
+                    row.append(fail_text)
+                continue
             else: #compare_type == 'numerical'
                 if not all([isinstance(point, (int, float)) for point in data_points]):
                     if conv_text_to_num:
@@ -403,7 +402,7 @@ def _compare_columns_core(data, cols, compare_type, header_row=True,
                     if require_nonzero and data_points[0] == 0:
                         row.append(fail_text_nonzero)
                         continue
-                    elif data_points[0] != data_points[1]: # in tolerance band but not exactly equal
+                    if data_points[0] != data_points[1]: # in tolerance band but not exactly equal
                         if fail_detail:
                             row.append(f'{pass_in_tolerance_text}: {str(data_points[0])} -> {str(data_points[1])}')
                         else:

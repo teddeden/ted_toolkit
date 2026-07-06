@@ -30,13 +30,13 @@ def _isolated(string_in, search_string, loc):
                 cur_str_delim = item
             code.append(index)
             continue
-        else: #status == 'STRINGS'
-            if item == cur_str_delim and string_in[index - 1] != '\\':
-                code.append(index)
-                flip_status()
-                cur_str_delim = None
-            else:
-                strings.append(index)
+        #status == 'STRINGS'
+        if item == cur_str_delim and string_in[index - 1] != '\\':
+            code.append(index)
+            flip_status()
+            cur_str_delim = None
+        else:
+            strings.append(index)
     if loc in strings:
         return False
     if loc + len(search_string) < len(string_in):
@@ -72,12 +72,12 @@ def _guess_var(calling_function):
     ass_var = None
 
     if last[:4] == 'for ' and (ass_pos > 0 or app_pos > 0) and col_pos > 0 and in_pos > 5:
-        '''(I) for item in my_list: item = []; (I)for item in my_list[1:]: item += 1;
-        (I)for line in my_table[1:]: line.append(my_function(line));
-        (I)for index, line in enumerate(abc): line.append(index)
-        (II)for a in range(10): some_other_var_we_want_to_preview += a;
-        (II)for index, item in enumerate(uninteresting_var):
-                some_other_var_we_want_to_preview[index] += item'''
+        # (I) for item in my_list: item = []; (I)for item in my_list[1:]: item += 1;
+        # (I)for line in my_table[1:]: line.append(my_function(line));
+        # (I)for index, line in enumerate(abc): line.append(index)
+        # (II)for a in range(10): some_other_var_we_want_to_preview += a;
+        # (II)for index, item in enumerate(uninteresting_var):
+        #         some_other_var_we_want_to_preview[index] += item
         loop_var_name = last.split(' ')[1 if 'enumerate' not in last else 2].strip()
         print('Loop var name: ', loop_var_name)
         loop_var_name_positions = _all_pos(last, loop_var_name)
@@ -85,12 +85,12 @@ def _guess_var(calling_function):
         print('Loop Var Second Position: ', loop_var_sec_pos)
         if (loop_var_sec_pos > ass_pos and ass_pos != -1) or \
            (loop_var_sec_pos > app_pos and app_pos != -1):
-            '''(II)'''
+            # (II)
             print('Case II')
             ass_var = last[col_pos+1:app_pos+ass_pos+1].strip('/%*+- ')
             print('Assignment var = ', ass_var)
         else:
-            '''(I)'''
+            # (I)
             print('Case I')
             ass_var = last[in_pos+2:col_pos].strip()
             print('Assvar = ', ass_var)
@@ -104,11 +104,11 @@ def _guess_var(calling_function):
     print('Assignment var = ', ass_var)
 
     if last[:4] != 'for ' and ass_pos > 0 and app_pos == -1:
-        '''abc = defg'''
+        # abc = defg
         ass_var = last[:ass_pos].strip('%*/+- ')
 
     if last[:4] != 'for ' and ass_pos == -1 and app_pos > 0:
-        '''a.append('cow')'''
+        # a.append('cow')
         ass_var = last[:app_pos].strip()
 
     # Look up ass_var in the *interactive session's* globals, not this
@@ -169,9 +169,8 @@ def data_preview(data_in=None, **kwargs):
                 print('Item count: {}\n'.format(str(len(data_in))))
                 print(_prev_s(data_in))
             return
-        else:
-            print('Variable contains empty list\n')
-            return
+        print('Variable contains empty list\n')
+        return
     if isinstance(data_in, dict) or isinstance(data_in, collections.OrderedDict):
         print('Data is type **dict** with {} keys.\n\nkey - preview'.format(str(len(data_in))))
         for key in list(data_in)[:20]:
@@ -195,9 +194,8 @@ def _prev_s(item):
     if isinstance(item, str):
         if len(item) < 60:
             return 'String: "{}"'.format(item)
-        else:
-            return 'String: "{}...'.format(item[:58])
-    elif isinstance(item, int) or isinstance(item, float) or isinstance(item, bool):
+        return 'String: "{}...'.format(item[:58])
+    if isinstance(item, int) or isinstance(item, float) or isinstance(item, bool):
         return str(item)
     elif isinstance(item, list):
         return 'List: ' + ', '.join([str(element) for element in item])[:60]

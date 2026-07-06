@@ -212,7 +212,7 @@ def _data_join_core(base_table, ext_table, join_type, base_key_col, ext_key_col,
             cat = key_dict['reverse'][key]
             if cat in ['A', 'D']:
                 continue
-            elif cat in ['E']:
+            if cat in ['E']:
                 joined.append([key, cat] + base_table[base_index_key_lookup[key][0]] + ext_line)
             elif cat in ['C', 'H']:
                 joined.append([key, cat] + base_blank + ext_line)

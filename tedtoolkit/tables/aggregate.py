@@ -84,12 +84,10 @@ def _arithmetic_stats(array, operator, options):
             except ValueError:
                 if options['ignore_non_numbers'] or (len(item) == 0 and options['ignore_empty']):
                     continue
-                else:
-                    return options['non_numbers_text']
+                return options['non_numbers_text']
         if options['ignore_non_numbers']:
             continue
-        else:
-            return options['non_numbers_text']
+        return options['non_numbers_text']
     if len(intermediate) == 0:
         return options['empty_text']
     return {'sum':sum(intermediate), 'min':min(intermediate), 'max':max(intermediate), \
@@ -120,8 +118,7 @@ def _filled_stats(array, operator):
         return {'all_filled':False, 'some_filled':False, 'none_filled':True}[operator]
     if len(filled) == len(array):
         return {'all_filled':True, 'some_filled':True, 'none_filled':False}[operator]
-    else:
-        return {'all_filled':False, 'some_filled':True, 'none_filled':False}[operator]
+    return {'all_filled':False, 'some_filled':True, 'none_filled':False}[operator]
 
 
 def _get_float(var, default_val='NaN'):
@@ -449,7 +446,7 @@ def _data_aggregate_core(table_in, headers, agg_key_col, agg_key_name, agg_specs
                     if var_type == 'BLANK' or \
                        cat_data[line[cat_key_col]][line[agg_key_col]] == non_numbers_text:
                         continue
-                    elif var_type in ['DATE', 'TEXT'] and not ignore_non_numbers:
+                    if var_type in ['DATE', 'TEXT'] and not ignore_non_numbers:
                         cat_data[line[cat_key_col]][line[agg_key_col]] = non_numbers_text
                     else:
                         cat_data[line[cat_key_col]][line[agg_key_col]] += _get_float(line[col],

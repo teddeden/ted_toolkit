@@ -319,7 +319,7 @@ def _square_tables(left, right, fill_char=''):
         for ind, line in enumerate(table[1:], 1):
             if len(line) == length:
                 continue
-            elif len(line) < length:
+            if len(line) < length:
                 print(b_warn.format(\
                     ind, 'right' if index else 'left'))
                 table[ind] += [fill_char] * (length - len(line))
@@ -575,7 +575,7 @@ def reconcile(orig_table, new_table, **kwargs):
                     if l_result == r_result:
                         line.append(match_text)
                         continue
-                    elif tolerance and in_tolerance(l_result, r_result, tolerance):
+                    if tolerance and in_tolerance(l_result, r_result, tolerance):
                         line.append(in_tolerance_text)
                         continue
                 line.append(str(l_result) + transition_text + str(r_result))
