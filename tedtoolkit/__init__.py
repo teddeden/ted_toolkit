@@ -27,3 +27,4 @@ from .tables.columns import *
 from .tables.preview import *
 from .tables.reconcile import *
 from .tables.join import *
+from .tables.aggregate import *
