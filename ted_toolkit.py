@@ -1,4 +1,4 @@
-﻿# ted_toolkit.py: Swiss knife in python
+# ted_toolkit.py: Swiss knife in python
 '''
 Required environment: see environment.yml (python=3.12; pyreadline3 depends on the classic
 CPython REPL, which 3.12 uses by default - 3.13's new _pyrepl console bypasses the readline
