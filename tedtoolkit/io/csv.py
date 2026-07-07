@@ -15,7 +15,12 @@ from tedtoolkit.gui.dialogs import g_sel_file, g_sel_file_to_write
 def _parse_csv_args(case, **kwargs):
     '''parses and prompts for keyword arguments as needed
     case must be 'import' or 'export'
-    returns updated kwargs dict'''
+    returns updated kwargs dict
+    kwargs may include the internal-use-only '_caller_fn_name', set by data_import()/
+    data_export() so any prompted-for values get baked into history against the name the
+    user actually typed, rather than against 'csv_import'/'csv_export' (which never
+    appears in history when csv is reached via the data_import()/data_export() dispatcher)'''
+    fn_name = kwargs.pop('_caller_fn_name', 'csv_import' if case == 'import' else 'csv_export')
     file_path = kwargs.get('file_path', None)
     if file_path is None and case == 'import':
         file_path = g_sel_file(title='Import CSV data',
@@ -26,22 +31,22 @@ def _parse_csv_args(case, **kwargs):
             filetypes=[('CSV files', ('*.csv')),
                        ('Text files', ('*.txt', '*.text'))])
     if 'delim' not in kwargs:
-        delim = _prompt_for_any_arg('delim', ',')
+        delim = _prompt_for_any_arg('delim', ',', fn_name=fn_name)
     else:
         delim = kwargs['delim']
     if 'quoting' not in kwargs:
         quoting = _prompt_for_list_arg('quoting',
-            list(QUOTING_OPTIONS.keys()), default_index=1)
+            list(QUOTING_OPTIONS.keys()), default_index=1, fn_name=fn_name)
     else:
         quoting = kwargs['quoting']
     if 'quote_mark' not in kwargs:
-        quote_mark = _prompt_for_any_arg('quote_mark', '"')
+        quote_mark = _prompt_for_any_arg('quote_mark', '"', fn_name=fn_name)
     else:
         quote_mark = kwargs['quote_mark']
     if 'encoding' not in kwargs:
         encoding = _prompt_for_list_arg('encoding',
             ['utf_8', 'ascii', 'windows-1252', 'latin-1',
-            'utf_16', 'utf_32'], default_index=0)
+            'utf_16', 'utf_32'], default_index=0, fn_name=fn_name)
     else:
         encoding = kwargs['encoding']
     if encoding == 'autodetect':
@@ -55,23 +60,23 @@ def _parse_csv_args(case, **kwargs):
             print(f'WARNING: Less than full confidence (1.0) in autodetected encoding: {res["confidence"]}\n\n')
     if 'line_terminator' not in kwargs:
         line_terminator = \
-            _prompt_for_any_arg('line_terminator', '\n')
+            _prompt_for_any_arg('line_terminator', '\n', fn_name=fn_name)
     else:
         line_terminator = kwargs['line_terminator']
     if 'convert_numbers' not in kwargs and case == 'import':
         convert_numbers = \
-            _prompt_for_bool_arg('convert_numbers', False)
+            _prompt_for_bool_arg('convert_numbers', False, fn_name=fn_name)
     else:
         convert_numbers = kwargs.get('convert_numbers', False)
     if 'convert_dates' not in kwargs:
         convert_dates = \
-            _prompt_for_bool_arg('convert_dates', False)
+            _prompt_for_bool_arg('convert_dates', False, fn_name=fn_name)
     else:
         convert_dates = kwargs.get('convert_dates', False)
     if convert_dates and ('date_format' not in kwargs):
         date_format = \
             _prompt_for_any_arg('date_format',
-                                '%Y-%m-%d %H:%M:%S.%f')
+                                '%Y-%m-%d %H:%M:%S.%f', fn_name=fn_name)
     else:
         date_format = kwargs.get('date_format', None)
     return {'file_path':file_path, 'delim':delim,
@@ -90,7 +95,9 @@ def csv_export(data, **kwargs):
     quoting, (default = 'QUOTE_MINIMAL')
     convert_dates - T/F option to specify non-default
         string format to be used to convert datetime objects;
-        if True, date_format should be specified.'''
+        if True, date_format should be specified.
+    _caller_fn_name - [INTERNAL USE] set by data_export() so prompted-for
+        values are baked into the caller's history line, not this function's'''
     kwargs = _parse_csv_args('export', **kwargs)
     if not _is_list_of_lists(data):
         raise Exception('Export CSV Failed: No content')
@@ -179,6 +186,8 @@ def csv_import(**kwargs):
          default '%Y-%m-%d %H:%M:%S.%f'
          will be ignored if convert_dates == False
     quoting, (default = 'QUOTE_MINIMAL')
+    _caller_fn_name - [INTERNAL USE] set by data_import() so prompted-for
+        values are baked into the caller's history line, not this function's
     '''
     kwargs = _parse_csv_args('import', **kwargs)
     print('Reading CSV file at location {}'.format(kwargs['file_path']))

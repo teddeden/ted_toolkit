@@ -1,6 +1,8 @@
 import csv as csv_module
+import readline
 
 from tedtoolkit.io.csv import _csv_import_core, _csv_export_core, csv_export, csv_import
+from tedtoolkit import prompts as prompts_module
 
 
 def test_csv_export_core_writes_file(tmp_path):
@@ -65,3 +67,21 @@ def test_csv_wrapper_round_trip_no_prompts_when_fully_specified(tmp_path):
                         line_terminator='\n', quoting='QUOTE_MINIMAL', convert_numbers=True,
                         convert_dates=False, date_format=None)
     assert result == data
+
+
+def test_csv_import_bakes_prompted_kwargs_into_history(monkeypatch, seed_history, tmp_path):
+    '''Regression test: csv_import() only had file_path/etc pre-supplied here via kwargs
+    is not the point - the point is that when delim/encoding/etc are *not* supplied and get
+    prompted for internally (via _parse_csv_args), the resolved values must be baked into
+    the history line, exactly like every other guided function's missing kwargs are.'''
+    monkeypatch.setattr(prompts_module, 'ask_yn', lambda *a, **k: True)
+    file_path = tmp_path / 'in.csv'
+    file_path.write_text('id,name\n1,a\n', encoding='utf_8')
+    seed_history(f"result = csv_import(file_path='{file_path}')")
+    csv_import(file_path=str(file_path))
+    rewritten = readline.get_history_item(1)
+    assert 'csv_import(' in rewritten
+    assert 'delim=' in rewritten
+    assert 'encoding=' in rewritten
+    assert 'quoting=' in rewritten
+    assert 'convert_numbers=' in rewritten
