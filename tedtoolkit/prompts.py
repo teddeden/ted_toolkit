@@ -138,12 +138,14 @@ def ask_select_column_index(table_in, **kwargs):
 ask_select_column_index.desc = 'user prompt: column index'
 
 
-def _prompt_for_any_arg(arg_name, default_val, numeric=False):
+def _prompt_for_any_arg(arg_name, default_val, numeric=False, fn_name=None):
     '''Prompts for arg_name value to be default_val; if user
        does not want to use default_val, user can specify any
        value desired. If numeric is True, user is forced to enter
        a numeric value and this will be converted to a float.
-       Otherwise, response will be interpreted as a text string'''
+       Otherwise, response will be interpreted as a text string
+       fn_name: name of the guided function whose history line the
+       resolved value should be baked into (defaults to the immediate caller)'''
     prompt = 'The argument <{}> is set to <{}>. Is this ok?'
     if not ask_yn(default='y', prompt=prompt.format(arg_name,
         repr(default_val))):
@@ -164,18 +166,21 @@ def _prompt_for_any_arg(arg_name, default_val, numeric=False):
     else:
         ret_val = default_val
     print(f'<{arg_name}> has been set to <{repr(ret_val)}>.')
-
+    _add_kwarg_to_last_command(arg_name, ret_val if numeric else _quoted(ret_val),
+        fn_name=fn_name or traceback.extract_stack()[-2].name)
     return ret_val
 
 
 def _prompt_for_list_arg(arg_name, choices_list,
-                         default_index=None):
+                         default_index=None, fn_name=None):
     '''prompts for arg_name which must be a selection from
        the choices in choices_list.  If default_index is
        given, will first prompt user if this is ok.
        Otherwise (or if it is not ok), user will see choice
        selection and be given the option to choose.
-       Function returns selected value (not index).'''
+       Function returns selected value (not index).
+       fn_name: name of the guided function whose history line the
+       resolved value should be baked into (defaults to the immediate caller)'''
     if len(choices_list) == 0:
         raise Exception('You must pass a nonempty choices_list')
     if default_index is not None:
@@ -187,7 +192,10 @@ def _prompt_for_list_arg(arg_name, choices_list,
         pmt = 'The argument <{}> is set to <{}>. Is this ok?'
         if ask_yn(default='y', prompt=pmt.format(arg_name,
             choices_list[default_index])):
-            return choices_list[default_index]
+            ret_val = choices_list[default_index]
+            _add_kwarg_to_last_command(arg_name, _quoted(ret_val),
+                fn_name=fn_name or traceback.extract_stack()[-2].name)
+            return ret_val
     print('For <{}> you have the following choices:'.format(
         arg_name))
     for index, item in enumerate(choices_list):
@@ -206,11 +214,15 @@ def _prompt_for_list_arg(arg_name, choices_list,
             continue
         ok = True
     print('<{}> has been set to <{}>.'.format(arg_name, ret_val))
+    _add_kwarg_to_last_command(arg_name, _quoted(ret_val),
+        fn_name=fn_name or traceback.extract_stack()[-2].name)
     return ret_val
 
 
-def _prompt_for_bool_arg(arg_name, default_val=True):
-    '''prompts for arg_name which must be boolean'''
+def _prompt_for_bool_arg(arg_name, default_val=True, fn_name=None):
+    '''prompts for arg_name which must be boolean
+       fn_name: name of the guided function whose history line the
+       resolved value should be baked into (defaults to the immediate caller)'''
     prompt = 'The argument <{}> is set to <{}>. Is this ok?'
     if not ask_yn(default='y', prompt=prompt.format(arg_name,
         default_val)):
@@ -218,6 +230,8 @@ def _prompt_for_bool_arg(arg_name, default_val=True):
     else:
         ret_val = default_val
     print('<{}> has been set to <{}>.'.format(arg_name, ret_val))
+    _add_kwarg_to_last_command(arg_name, ret_val,
+        fn_name=fn_name or traceback.extract_stack()[-2].name)
     return ret_val
 
 

@@ -94,7 +94,7 @@ def data_import(**kwargs):
         return sheets[selected_sheet]
 
     if process_as == 'csv':
-        return csv_import(file_path=file_path,
+        return csv_import(file_path=file_path, _caller_fn_name='data_import',
                           **{k: kwargs[k] for k in _CSV_IMPORT_KWARGS if k in kwargs})
 
     return read_txt(file_path=file_path, encoding=kwargs.get('encoding', 'utf-8'))
@@ -141,7 +141,7 @@ def data_export(data, **kwargs):
         raise Exception('data_export(): CSV/TXT export requires a list-of-lists table.')
 
     if process_as == 'csv':
-        return csv_export(data, file_path=file_path,
+        return csv_export(data, file_path=file_path, _caller_fn_name='data_export',
                           **{k: kwargs[k] for k in _CSV_EXPORT_KWARGS if k in kwargs})
 
     return _txt_export(data, file_path, encoding=kwargs.get('encoding', 'utf-8'))
