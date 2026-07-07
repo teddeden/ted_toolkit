@@ -19,9 +19,15 @@ input.desc = 'Capture keyboard input (no history)'
 
 
 def _quoted(text_in):
-    '''return string with quotes around it'''
-    text_in = str(text_in)
-    return '"'+text_in+'"' if '\'' in text_in else '\''+text_in+'\''
+    '''return a valid, single-line Python string literal for text_in, suitable for
+    splicing into a readline history line / replayed script. Must escape whatever
+    the text contains (newlines, tabs, backslashes, embedded quotes, ...) - e.g.
+    line_terminator='\\n' is a single newline character, not the two-character
+    sequence backslash-n, and naively wrapping it in quotes would splice a literal
+    newline into the history line, breaking single-line replay. repr() already
+    produces exactly this: a correctly escaped, single-line literal that reconstructs
+    the original value when eval()'d/exec()'d.'''
+    return repr(str(text_in))
 
 
 def _get_last_command():
