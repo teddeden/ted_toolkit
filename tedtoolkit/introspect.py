@@ -4,6 +4,7 @@ latter two stay in the root ted_toolkit.py launcher since they inspect the
 interactive session's own globals() - see that file's module docstring).
 '''
 
+import datetime
 import importlib.util
 import inspect
 import os
@@ -14,6 +15,29 @@ from tedtoolkit.gui.messagebox import g_conditional_stop
 from tedtoolkit.util import get_local_timestamp
 
 DYNAMIC_IMPORTS = {}
+
+
+def _variable_snapshot_core(namespace, exclude_globals=True):
+    '''Pure, namespace-explicit counterpart to help_vars()'s variable-listing
+    filter (ted_toolkit.py) - takes an explicit dict instead of eval()-ing
+    against globals(), so it is safe to call from any module/process given a
+    copy of (or direct reference to) a session's namespace. Used by the GUI
+    bridge (tedtoolkit/gui_bridge.py) to build the live Variables panel.
+
+    Mirrors help_vars()'s type allowlist and _-prefix/ALL-CAPS exclusion
+    rules exactly, so the GUI panel matches what help_vars() would show.
+    Returns a list of {'name', 'type', 'preview'} dicts.'''
+    allowed_types = (int, float, bool, str, list, set, dict, datetime.datetime)
+    result = []
+    for name, value in namespace.items():
+        if name[0] == '_':
+            continue
+        if not isinstance(value, allowed_types):
+            continue
+        if exclude_globals and name.isupper():
+            continue
+        result.append({'name': name, 'type': type(value).__name__, 'preview': repr(value)[:40]})
+    return result
 
 
 def dynamic_import(**kwargs):
