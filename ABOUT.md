@@ -152,7 +152,9 @@ A separate top-level package, sibling to `tedtoolkit/` — **not** the same thin
 `tedtoolkit/gui/` (the tkinter dialog/messagebox helpers used by guided functions themselves).
 `toolkit_gui/` is an optional PySide6 desktop shell around the toolkit; `start_ted_toolkit.bat`
 and everything under `tedtoolkit/` work exactly as before, completely unaware this package
-exists. Launch it with `python -m toolkit_gui.app` (from within `toolkit-env`).
+exists. Launch it by double-clicking (or running) `start_ted_toolkit_gui.bat`, the GUI's
+counterpart to `start_ted_toolkit.bat` — it activates `toolkit-env` the same way, then runs
+`python -m toolkit_gui.app` instead of `python -i ted_toolkit.py`.
 
 **The core architectural idea**: each GUI tab hosts its interactive session as its own real
 `python -i ted_toolkit.py` **OS process**, spawned inside a genuine Windows pseudo-console
