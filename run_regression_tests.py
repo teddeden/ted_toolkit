@@ -32,6 +32,30 @@ KNOWN_UNTESTABLE = [
     ('data_recon() col_select=\'LIST\' with no columns kwarg, or col_mode=\'NAME\'',
      'Known gap, not a test-coverage gap: calls _sel_compare_cols()/_check_convert_text_cols(), '
      'neither of which exist anywhere in the codebase. See ABOUT.md "Known gaps".'),
+    ('toolkit_gui: real ConPTY spawn/timing (WinPtyBackend, env_resolve.build_spawn_argv)',
+     'Requires actually launching python -i ted_toolkit.py inside a real Windows pseudo-console '
+     'and conda activation; the pure argv-construction and pid-resolution logic is unit tested, '
+     'but the live spawn itself is not. Verify by hand: open the GUI, confirm a new tab reaches '
+     'the interactive prompt.'),
+    ('toolkit_gui: TerminalWidget rendering, keystroke forwarding, and arrow-key history recall',
+     'Requires a real Qt event loop, a live PtySession, and pyreadline3 running inside the child - '
+     'the same fundamental limitation as plain-CLI keystroke capture above, just behind a GUI '
+     'widget instead of a raw console. Verify by hand: type a command in a tab, press Up, confirm '
+     'it is recalled exactly as it would be in start_ted_toolkit.bat.'),
+    ('toolkit_gui: tkinter dialogs launched from a ConPTY-hosted, console-window-less process',
+     'save_history()\'s Save-As dialog and any g_ask_*/g_show_* popup still work when triggered '
+     'from a GUI tab (confirmed manually during development), but this cannot be asserted '
+     'automatically for the same reasons as the plain-CLI tkinter dialogs above.'),
+    ('toolkit_gui: Save/Restore Session\'s live process handshake (session_persistence.py)',
+     'The .tedsession file format and the bridge RPC handlers are unit tested; the actual '
+     'spawn-a-tab / wait-for-fresh-prompt / feed-transcript / restore-over-the-wire sequence '
+     'requires a live ConPTY-hosted process and is verified manually. Verify by hand: save a '
+     'session with a variable, restore it into a new tab, confirm the variable is usable '
+     'without re-running any commands.'),
+    ('toolkit_gui: CPU status bar sum and per-tab busy indicator',
+     'Depends on real psutil.Process CPU sampling against live spawned processes over multiple '
+     'poll ticks; verified manually by running a CPU-heavy command and watching the tab dot and '
+     'status bar respond.'),
 ]
 
 
