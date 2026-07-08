@@ -8,6 +8,7 @@ from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (QFileDialog, QInputDialog, QLabel, QMainWindow, QMenu, QStyle,
                                 QTabWidget)
 
+from toolkit_gui import session_persistence
 from toolkit_gui.session_manager import SessionManager
 from toolkit_gui.widgets.icons import make_status_dot_icon
 
@@ -69,6 +70,14 @@ class MainWindow(QMainWindow):
             style.standardIcon(QStyle.SP_DriveFDIcon), 'Save All &Chat Content...', self)
         self.action_save_chat.triggered.connect(self._save_chat_current_tab)
 
+        self.action_save_session = QAction(
+            style.standardIcon(QStyle.SP_DriveHDIcon), 'Save Se&ssion...', self)
+        self.action_save_session.triggered.connect(self._save_session)
+
+        self.action_restore_session = QAction(
+            style.standardIcon(QStyle.SP_BrowserReload), '&Restore Session...', self)
+        self.action_restore_session.triggered.connect(self._restore_session)
+
         self.action_exit = QAction('E&xit', self)
         self.action_exit.triggered.connect(self.close)
 
@@ -82,6 +91,9 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self.action_save_history)
         file_menu.addAction(self.action_save_chat)
         file_menu.addSeparator()
+        file_menu.addAction(self.action_save_session)
+        file_menu.addAction(self.action_restore_session)
+        file_menu.addSeparator()
         file_menu.addAction(self.action_exit)
 
     def _build_toolbar(self):
@@ -92,6 +104,8 @@ class MainWindow(QMainWindow):
         toolbar.addAction(self.action_run_script_new)
         toolbar.addAction(self.action_save_history)
         toolbar.addAction(self.action_save_chat)
+        toolbar.addAction(self.action_save_session)
+        toolbar.addAction(self.action_restore_session)
 
     def _run_script_in_current_tab(self):
         '''Injects the equivalent of typing _run_script([path], view_comments=True)
@@ -136,6 +150,22 @@ class MainWindow(QMainWindow):
             return
         with open(path, 'w', encoding='utf-8') as fil:
             fil.write(tab.terminal.screen_text_for_save())
+
+    def _save_session(self):
+        '''Menu-only: never reachable from the plain CLI (see
+        tedtoolkit.gui_bridge.rpc_save_session, never imported into
+        ted_toolkit.py). Saves the active tab's transcript, history, and
+        working variables to a .tedsession file.'''
+        tab = self.current_tab()
+        if tab is None:
+            return
+        session_persistence.save_session(self, tab)
+
+    def _restore_session(self):
+        '''Menu-only: always creates a brand-new tab (never merges into an
+        existing one) and never replays/executes any command - see
+        tedtoolkit.gui_bridge.rpc_restore_session.'''
+        session_persistence.restore_session(self, self)
 
     def new_tab(self, extra_args=None):
         '''Spawn a new session tab. extra_args (e.g. a script path) is

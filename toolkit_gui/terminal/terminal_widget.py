@@ -59,6 +59,7 @@ class TerminalWidget(QWidget):
         self.setFocusPolicy(Qt.StrongFocus)
         self.setAttribute(Qt.WA_OpaquePaintEvent)
 
+        self._input_blocked = False
         self._repaint_pending = False
         self._repaint_timer = QTimer(self)
         self._repaint_timer.setInterval(33)  # ~30fps coalesced repaint
@@ -79,16 +80,31 @@ class TerminalWidget(QWidget):
 
     def screen_text_for_save(self):
         '''Flatten the full scrollback (history + visible viewport) to plain
-        text for the "Save All Chat Content" menu action.'''
+        text for the "Save All Chat Content" menu action and for reseeding a
+        restored session's transcript (see feed_text()). Uses \\r\\n line
+        endings deliberately: (1) classic Notepad (opened via save_history()'s
+        own flow) needs CRLF to render line breaks at all, and (2) this same
+        text gets re-fed through pyte's VT parser on restore, where a bare
+        \\n (line feed) only moves the cursor down a row without resetting
+        its column - producing a staircase/corrupted redraw - while \\r\\n
+        (carriage return + line feed) reproduces normal terminal newline
+        behavior correctly.'''
         lines = [_row_to_text(row) for row in self._screen.history.top]
         lines.extend(self._screen.display)
         lines.extend(_row_to_text(row) for row in self._screen.history.bottom)
-        return '\n'.join(line.rstrip() for line in lines)
+        return '\r\n'.join(line.rstrip() for line in lines)
+
+    def display_text(self):
+        '''Current visible-viewport text (not full scrollback) - used to
+        detect known startup markers, e.g. during Restore Session's
+        handshake (see toolkit_gui.session_persistence).'''
+        return '\n'.join(self._screen.display)
 
     def feed_text(self, text):
         '''Feed text directly into the display buffer without going through
         the pty - used to reseed a restored session's transcript before any
-        live pty output arrives (see Phase 7's restore flow).'''
+        live pty output arrives (see Phase 7's restore flow). Expects \\r\\n
+        line endings (see screen_text_for_save()).'''
         self._stream.feed(text)
         self.update()
 
@@ -129,7 +145,16 @@ class TerminalWidget(QWidget):
             painter.fillRect(cursor_x, cursor_y, self._char_width, self._char_height,
                               QColor(220, 220, 220, 100))
 
+    def set_input_blocked(self, blocked):
+        '''Suppress keyboard forwarding while a Restore Session is pending -
+        closes the narrow race where a very fast typist could type into a
+        freshly spawned tab before its history/variables have been injected.'''
+        self._input_blocked = blocked
+
     def keyPressEvent(self, event):
+        if self._input_blocked:
+            event.accept()
+            return
         key = event.key()
         if key in _KEY_SEQUENCES:
             self._session.write(_KEY_SEQUENCES[key])

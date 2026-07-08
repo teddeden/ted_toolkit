@@ -36,6 +36,9 @@ class BridgeClient:
                 time.sleep(retry_delay)
         raise ConnectionError(f'Could not connect to bridge on port {self._port}') from last_exc
 
+    def is_connected(self):
+        return self._sock is not None
+
     def close(self):
         if self._sock is not None:
             try:
