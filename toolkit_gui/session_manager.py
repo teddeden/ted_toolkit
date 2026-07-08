@@ -48,7 +48,8 @@ class SessionManager(QObject):
         port = find_free_port()
         env = dict(os.environ)
         env['TEDTOOLKIT_GUI_BRIDGE_PORT'] = str(port)
-        session = self._backend.spawn(build_spawn_argv(extra_args), env=env, cols=120, rows=40)
+        session = self._backend.spawn(build_spawn_argv(extra_args), env=env,
+                                       cols=config.TERMINAL_COLS, rows=config.TERMINAL_ROWS)
         bridge_client = BridgeClient(port)
         tab = SessionTabWidget(session, bridge_client, parent=parent)
         self._tabs.append(tab)

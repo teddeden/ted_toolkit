@@ -47,7 +47,12 @@ class TerminalWidget(QWidget):
     def __init__(self, session, parent=None):
         super().__init__(parent)
         self._session = session
-        self._screen = pyte.HistoryScreen(120, 40, history=config.TERMINAL_SCROLLBACK_LINES)
+        # Must exactly match the cols/rows the session's pty was actually
+        # spawned with (config.TERMINAL_COLS/TERMINAL_ROWS, applied in
+        # session_manager.spawn_tab()) and must never be resized afterward -
+        # see config.py's TERMINAL_COLS docstring for why.
+        self._screen = pyte.HistoryScreen(config.TERMINAL_COLS, config.TERMINAL_ROWS,
+                                           history=config.TERMINAL_SCROLLBACK_LINES)
         self._stream = pyte.Stream(self._screen)
 
         self._font = QFont('Consolas', 10)
@@ -108,15 +113,6 @@ class TerminalWidget(QWidget):
         self._stream.feed(text)
         self.update()
 
-    def resize_pty_to_widget(self):
-        cols = max(1, self.width() // self._char_width)
-        rows = max(1, self.height() // self._char_height)
-        self._screen.resize(rows, cols)
-        try:
-            self._session.resize(cols, rows)
-        except Exception:
-            pass
-
     def _on_output(self, chunk):
         self._stream.feed(chunk.decode('utf-8', errors='surrogateescape'))
         self._repaint_pending = True
@@ -125,10 +121,6 @@ class TerminalWidget(QWidget):
         if self._repaint_pending:
             self._repaint_pending = False
             self.update()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.resize_pty_to_widget()
 
     def paintEvent(self, event):
         painter = QPainter(self)

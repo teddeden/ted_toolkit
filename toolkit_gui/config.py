@@ -24,6 +24,22 @@ PREVIEW_MAX_COLS = 250
 # spike measured ~2,300 lines/sec sustained parse throughput at this size).
 TERMINAL_SCROLLBACK_LINES = 200_000
 
+# Fixed character-grid size for every session's pty AND its local pyte
+# HistoryScreen - these two MUST always match exactly and MUST NOT be
+# resized independently after spawn. pyte.Screen.resize() does not reflow
+# existing content (it silently clips columns when shrinking, unlike a real
+# Windows console, which reflows/redraws its whole buffer on resize); a
+# reactive resize-to-widget-size on every Qt resizeEvent was found to
+# corrupt/garble output whenever real content already existed at resize
+# time (Qt's own multi-pass initial layout fires resizeEvent several times
+# in quick succession) - confirmed via a side-by-side repro: identical
+# input rendered perfectly at a fixed size and garbled once dynamic
+# resizing was reintroduced. Do not resize a session's terminal after spawn
+# without designing a real reflow, not just calling both resize() methods
+# "in lockstep".
+TERMINAL_COLS = 120
+TERMINAL_ROWS = 40
+
 # A freshly spawned child needs a moment before its gui_bridge thread starts
 # listening - BridgeClient.connect() retries on this cadence.
 BRIDGE_CONNECT_RETRIES = 30
