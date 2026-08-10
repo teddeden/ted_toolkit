@@ -17,6 +17,7 @@ change, not an oversight.
 '''
 
 import os
+from collections import OrderedDict
 
 from tedtoolkit.history import _add_kwarg_to_last_command, _quoted
 from tedtoolkit.prompts import ask_select, _kwarg_parse_prompt_bool
@@ -25,6 +26,7 @@ from tedtoolkit.gui.dialogs import g_sel_file, g_sel_file_to_write
 from tedtoolkit.io.xlsx import xlsx_import, xlsx_export, ask_select_sheet, ALL_SHEETS_TEXT
 from tedtoolkit.io.csv import csv_import, csv_export
 from tedtoolkit.io.txt import read_txt, _txt_export
+from tedtoolkit.io.xml import xml_import
 
 LAST_PATH = os.getcwd()  # remembers the last folder used, to pre-seed subsequent GUI dialogs
 
@@ -32,6 +34,20 @@ _CSV_IMPORT_KWARGS = ('delim', 'quote_mark', 'quoting', 'encoding', 'line_termin
                       'convert_numbers', 'convert_dates', 'date_format')
 _CSV_EXPORT_KWARGS = ('delim', 'quote_mark', 'quoting', 'encoding', 'line_terminator',
                       'convert_dates', 'date_format')
+_XML_IMPORT_KWARGS = ('record_path', 'max_depth', 'residual_format', 'list_strategy',
+                      'list_strategy_overrides', 'aggregate_format', 'aggregate_delimiter',
+                      'max_indexed_items', 'force_list', 'path_separator', 'attribute_prefix',
+                      'text_key', 'include_attributes', 'include_text', 'namespace_mode',
+                      'empty_value', 'header_row', 'column_order', 'max_columns', 'max_rows',
+                      'on_malformed', 'return_metadata', 'low_memory')
+
+# data_export() has no XML branch (XML export is out of scope - see tedtoolkit/io/xml.py's module
+# docstring), so 'xml' is only ever a valid resolved format for data_import(), not data_export();
+# _resolve_process_as() takes the caller's valid-format set explicitly rather than hardcoding one
+# shared tuple, so adding 'xml' here can never let a .xml path silently fall through
+# data_export()'s if/elif chain into _txt_export().
+_IMPORT_FORMATS = ('xlsx', 'csv', 'txt', 'xml')
+_EXPORT_FORMATS = ('xlsx', 'csv', 'txt')
 
 
 def _file_ext(path):
@@ -39,13 +55,14 @@ def _file_ext(path):
     return os.path.splitext(path)[1].lstrip('.').lower()
 
 
-def _resolve_process_as(file_path, kwargs, fn_name):
-    '''resolve which format (xlsx/csv/txt) to use for file_path, prompting if ambiguous
+def _resolve_process_as(file_path, kwargs, fn_name, valid_formats):
+    '''resolve which format to use for file_path (from valid_formats), prompting if ambiguous
     and baking the resolved choice into history if it wasn't already an explicit kwarg'''
     process_as = kwargs.get('process_as', _file_ext(file_path))
-    if process_as not in ('xlsx', 'csv', 'txt'):
-        process_as = ask_select({'xlsx':'Excel 2003/2010 file', 'csv':'Comma separated values',
-                                 'txt':'Plain text file'},
+    if process_as not in valid_formats:
+        choices = OrderedDict([('xlsx', 'Excel 2003/2010 file'), ('csv', 'Comma separated values'),
+                               ('txt', 'Plain text file'), ('xml', 'XML file')])
+        process_as = ask_select({key: choices[key] for key in valid_formats},
                                 prompt='File type for "{}" is ambiguous; select the file type:'.format(
                                     file_path),
                                 orig_out=True)
@@ -55,31 +72,43 @@ def _resolve_process_as(file_path, kwargs, fn_name):
 
 
 def data_import(**kwargs):
-    '''Unified import for xlsx/csv/txt.
+    '''Unified import for xlsx/csv/txt/xml.
     kwargs:
-      file_path (prompts via GUI if not given)
-      process_as ('xlsx'|'csv'|'txt') - only needed if file_path's extension is ambiguous
+      file_path (prompts via GUI if not given) - a directory is only valid for XML (bulk import
+        of every *.xml file in it, returning dict[filename] -> table); every other format
+        requires a single file
+      process_as ('xlsx'|'csv'|'txt'|'xml') - only needed if file_path's extension is ambiguous
       selected_sheet (xlsx only) - sheet name to return, or ALL_SHEETS_TEXT to get a dict of all sheets
       include_formulas, override_ro (xlsx only)
       delim, quote_mark, quoting, encoding, line_terminator, convert_numbers, convert_dates,
         date_format (csv only)
-    Returns a list-of-lists (single sheet/csv/txt) or a dict of
-    {sheet_name: list-of-lists} (xlsx with selected_sheet=ALL_SHEETS_TEXT).
+      record_path, max_depth, residual_format, list_strategy, list_strategy_overrides,
+        aggregate_format, aggregate_delimiter, max_indexed_items, force_list, path_separator,
+        attribute_prefix, text_key, include_attributes, include_text, namespace_mode,
+        empty_value, header_row, column_order, max_columns, max_rows, on_malformed,
+        return_metadata, low_memory (xml only - see xml_import()'s docstring for each)
+    Returns a list-of-lists (single sheet/csv/txt/xml file) or a dict of
+    {sheet_name: list-of-lists} (xlsx with selected_sheet=ALL_SHEETS_TEXT) or
+    {filename: list-of-lists} (xml with a directory file_path).
     '''
     global LAST_PATH
     file_path = kwargs.get('file_path', '')
-    if not file_path or not os.path.isfile(file_path):
+    if not file_path or not (os.path.isfile(file_path) or os.path.isdir(file_path)):
         file_path = g_sel_file(title=kwargs.get('gui_prompt', 'data_import(): select file'),
                                initialdir=LAST_PATH,
-                               filetypes=[('Data files', ('*.xlsx', '*.csv', '*.txt')),
+                               filetypes=[('Data files', ('*.xlsx', '*.csv', '*.txt', '*.xml')),
                                           ('All files', ('*.*'))])
         if not file_path:
             print('No file selected: data import cancelled.\n')
             return None
         if 'file_path' not in kwargs:
             _add_kwarg_to_last_command('file_path', _quoted(file_path), fn_name='data_import')
-    LAST_PATH = os.path.split(file_path)[0]
-    process_as = _resolve_process_as(file_path, kwargs, 'data_import')
+    LAST_PATH = file_path if os.path.isdir(file_path) else os.path.split(file_path)[0]
+    process_as = _resolve_process_as(file_path, kwargs, 'data_import', _IMPORT_FORMATS)
+
+    if process_as == 'xml':
+        return xml_import(source=file_path, _caller_fn_name='data_import',
+                          **{k: kwargs[k] for k in _XML_IMPORT_KWARGS if k in kwargs})
 
     if process_as == 'xlsx':
         sheets = xlsx_import(file_path=file_path, include_formulas=kwargs.get('include_formulas', False),
@@ -98,7 +127,7 @@ def data_import(**kwargs):
                           **{k: kwargs[k] for k in _CSV_IMPORT_KWARGS if k in kwargs})
 
     return read_txt(file_path=file_path, encoding=kwargs.get('encoding', 'utf-8'))
-data_import.desc = 'Unified import: xlsx/csv/txt'
+data_import.desc = 'Unified import: xlsx/csv/txt/xml'
 
 
 def data_export(data, **kwargs):
@@ -123,7 +152,7 @@ def data_export(data, **kwargs):
         if 'file_path' not in kwargs:
             _add_kwarg_to_last_command('file_path', _quoted(file_path), fn_name='data_export')
     LAST_PATH = os.path.split(file_path)[0]
-    process_as = _resolve_process_as(file_path, kwargs, 'data_export')
+    process_as = _resolve_process_as(file_path, kwargs, 'data_export', _EXPORT_FORMATS)
     if not file_path.lower().endswith('.' + process_as):
         file_path = file_path + '.' + process_as
 

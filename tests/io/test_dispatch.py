@@ -58,6 +58,68 @@ def test_data_export_rejects_non_table_for_csv(tmp_path):
                     quoting='QUOTE_MINIMAL', convert_dates=False, date_format=None)
 
 
+_XML_FULLY_SPECIFIED = dict(record_path=None, list_strategy='explode', max_depth=None,
+                           namespace_mode='strip', on_malformed='raise', low_memory=False,
+                           header_row=True)
+
+
+def test_data_import_xml_single_file(tmp_path):
+    file_path = tmp_path / 'test.xml'
+    file_path.write_text('<Root><Rec><X>1</X></Rec><Rec><X>2</X></Rec></Root>', encoding='utf-8')
+    result = data_import(file_path=str(file_path), **_XML_FULLY_SPECIFIED)
+    assert result == [['X'], ['1'], ['2']]
+
+
+def test_data_import_xml_directory_bulk_mode(tmp_path):
+    '''Regression test for the directory-path guard fix: a directory file_path must reach XML
+    bulk mode, not be discarded by the "not os.path.isfile" GUI-fallback check.'''
+    (tmp_path / 'a.xml').write_text('<Root><Rec><X>1</X></Rec></Root>', encoding='utf-8')
+    (tmp_path / 'b.xml').write_text('<Root><Rec><X>2</X></Rec></Root>', encoding='utf-8')
+    result = data_import(file_path=str(tmp_path), process_as='xml', record_path='Root.Rec',
+                         **{k: v for k, v in _XML_FULLY_SPECIFIED.items() if k != 'record_path'})
+    assert result == {'a.xml': [['X'], ['1']], 'b.xml': [['X'], ['2']]}
+
+
+def test_data_export_xml_extension_still_prompts_among_non_xml_formats(monkeypatch, seed_history,
+                                                                        tmp_path):
+    '''data_export() must NOT gain 'xml' as a resolvable process_as (no XML export exists) - a
+    .xml path stays ambiguous and falls back to the xlsx/csv/txt selection prompt, exactly as
+    before this feature was added.'''
+    from tedtoolkit.io import dispatch as dispatch_module
+
+    def fake_ask_select(choices, **kwargs):
+        assert 'xml' not in choices  # the whole point of this test
+        return 'csv'
+    monkeypatch.setattr(dispatch_module, 'ask_select', fake_ask_select)
+    file_path = str(tmp_path / 'out.xml')
+    seed_history(f"result = data_export(data, file_path='{file_path}')")
+    data_export([['a'], [1]], file_path=file_path, delim=',', quote_mark='"', encoding='utf_8',
+                line_terminator='\n', quoting='QUOTE_MINIMAL', convert_dates=False,
+                date_format=None)
+    # .xml path resolved to 'csv' by the forced choice; data_export() then appends the correct
+    # .csv extension since the given path didn't already end with it (same as
+    # test_data_export_appends_missing_extension above).
+    assert os.path.isfile(file_path + '.csv')
+
+
+def test_data_import_xml_route_bakes_prompted_kwargs_onto_data_import_line(monkeypatch,
+                                                                           seed_history, tmp_path):
+    '''Same regression as the csv equivalent below, for the xml route: prompted values must be
+    baked onto the data_import(...) line, not a nonexistent xml_import(...) line.'''
+    from tedtoolkit.io import xml as xml_module
+    monkeypatch.setattr(xml_module, 'ask_yn', lambda *a, **k: True)
+    monkeypatch.setattr(prompts_module, 'ask_yn', lambda *a, **k: True)
+    file_path = tmp_path / 'in.xml'
+    file_path.write_text('<Root><Rec><X>1</X></Rec></Root>', encoding='utf-8')
+    seed_history(f"result = data_import(file_path='{file_path}')")
+    data_import(file_path=str(file_path))
+    rewritten = readline.get_history_item(1)
+    assert 'data_import(' in rewritten
+    assert 'xml_import(' not in rewritten
+    assert 'record_path=' in rewritten
+    assert 'list_strategy=' in rewritten
+
+
 def test_data_import_csv_route_bakes_prompted_kwargs_onto_data_import_line(monkeypatch, seed_history,
                                                                            tmp_path):
     '''Regression test: when data_import() routes to csv_import() for a missing

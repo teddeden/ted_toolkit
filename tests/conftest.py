@@ -4,7 +4,7 @@ import readline
 
 import pytest
 
-from tests.fixtures import sample_tables
+from tests.fixtures import sample_tables, xml_samples
 
 
 @pytest.fixture(autouse=True)
@@ -72,3 +72,28 @@ def ragged_table():
 @pytest.fixture
 def ambiguous_key_table():
     return sample_tables.ambiguous_key_table()
+
+
+@pytest.fixture
+def orders_xml():
+    return xml_samples.orders_xml()
+
+
+@pytest.fixture
+def namespaced_items_xml():
+    return xml_samples.namespaced_items_xml()
+
+
+@pytest.fixture
+def malformed_xml():
+    return xml_samples.malformed_xml()
+
+
+@pytest.fixture
+def context_xml():
+    return xml_samples.context_xml()
+
+
+@pytest.fixture
+def flat_records_xml():
+    return xml_samples.flat_records_xml()
