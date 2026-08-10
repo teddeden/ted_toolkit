@@ -9,6 +9,7 @@ dependencies:
   - vc
   - click
   - openpyxl
+  - lxml
   - pyreadline3
   - chardet
   - pywin32
