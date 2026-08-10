@@ -56,7 +56,7 @@ from tedtoolkit.io.dispatch import data_import, data_export
 from tedtoolkit.gui.messagebox import (g_ask_yn, g_ask_okcancel, g_conditional_stop,
                                         g_show_info, g_show_warning, g_show_error)
 
-VERSION = "0.72"
+VERSION = "0.73"
 
 FUNCTION_CATEGORIES = {
     'ask_num': 'User Input (text)',
@@ -257,10 +257,11 @@ def help_vars(exclude_globals=True):
 help_vars.desc = 'Show all current variables of common types'
 
 LAST_LINE_ATTEMPTED = -1
+SCRIPT_RUNNING = False
 
 def _run_script(args_list, **kwargs):
     '''takes saved history and re-runs it'''
-    global LAST_LINE_ATTEMPTED
+    global LAST_LINE_ATTEMPTED, SCRIPT_RUNNING
     cntd = kwargs.get('continued', False)
     if cntd:
         print(f'Continuing execution of Python (tookit) script from last line {LAST_LINE_ATTEMPTED + 1}\n\nTo cancel, press Ctrl+c.\n')
@@ -280,38 +281,42 @@ def _run_script(args_list, **kwargs):
         print(f'File ({py_file}) could not be processed.')
     else:
         view_comments = _kwarg_parse_prompt_bool('view_comments', default_val='False', **kwargs)
-        for ind, line in enumerate(py_content[LAST_LINE_ATTEMPTED+1:], start=LAST_LINE_ATTEMPTED+1):
-            LAST_LINE_ATTEMPTED = ind
-            if not line or line == '\r\n':
-                continue
-            if line[0] == '#':
-                if view_comments:
-                    print('Comment >>> ' + line)
-                    readline.add_history(line.strip())
-                continue
-            print('Replay >>> ' + line)
-            readline.add_history(line.strip())
-            if line.strip() == 'continue:execution()':
-                print('***SKIPPING continue_execution() (ALREADY EXECUTING)***')
-                continue
-            try:
-                exec(line, globals())
-            except KeyboardInterrupt:
-                print('Execution of pre-recorded script canceled by the user.')
-                print('*************TRACEBACK**************')
-                traceback.print_exception(*sys.exc_info())
-                print('***********END TRACEBACK************')
-                print('To continue later from this point, use continue_execution()')
-                return
-            except Exception as text:
-                beep()
-                print('Error encountered in line {}: \n{}\n'.format(str(ind+1), str(text)))
-                print('*************TRACEBACK**************')
-                traceback.print_exception(*sys.exc_info())
-                print('***********END TRACEBACK************')
-                if not ask_yn(prompt='Error encountered in script. Do you want to continue anyway?'):
+        SCRIPT_RUNNING = True
+        try:
+            for ind, line in enumerate(py_content[LAST_LINE_ATTEMPTED+1:], start=LAST_LINE_ATTEMPTED+1):
+                LAST_LINE_ATTEMPTED = ind
+                if not line or line == '\r\n':
+                    continue
+                if line[0] == '#':
+                    if view_comments:
+                        print('Comment >>> ' + line)
+                        readline.add_history(line.strip())
+                    continue
+                print('Replay >>> ' + line)
+                readline.add_history(line.strip())
+                if line.strip() == 'continue:execution()':
+                    print('***SKIPPING continue_execution() (ALREADY EXECUTING)***')
+                    continue
+                try:
+                    exec(line, globals())
+                except KeyboardInterrupt:
+                    print('Execution of pre-recorded script canceled by the user.')
+                    print('*************TRACEBACK**************')
+                    traceback.print_exception(*sys.exc_info())
+                    print('***********END TRACEBACK************')
                     print('To continue later from this point, use continue_execution()')
                     return
+                except Exception as text:
+                    beep()
+                    print('Error encountered in line {}: \n{}\n'.format(str(ind+1), str(text)))
+                    print('*************TRACEBACK**************')
+                    traceback.print_exception(*sys.exc_info())
+                    print('***********END TRACEBACK************')
+                    if not ask_yn(prompt='Error encountered in script. Do you want to continue anyway?'):
+                        print('To continue later from this point, use continue_execution()')
+                        return
+        finally:
+            SCRIPT_RUNNING = False
     print(f'\nExecution completed in {elapsed()}.')
     print('\nDone- You may continue session from this point or you may exit()\n')
     print('For function reference type "help_all()"')
@@ -330,6 +335,12 @@ continue_execution.desc = 'Restart script execution post-error'
 # can safely reference ARGS even if ted_toolkit.py is ever imported as a regular module instead
 # of run as the entry script.
 ARGS = sys.argv[1:]
+
+# Opt-in only: no-ops instantly unless the desktop GUI shell (toolkit_gui/) set
+# TEDTOOLKIT_GUI_BRIDGE_PORT before spawning this process. start_ted_toolkit.bat
+# never sets this, so plain command-line usage is completely unaffected.
+from tedtoolkit.gui_bridge import maybe_start_bridge
+maybe_start_bridge(globals())
 
 if __name__ == '__main__':
     # for usage as a main module

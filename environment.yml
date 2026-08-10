@@ -16,3 +16,7 @@ dependencies:
   - pip:
       - pytest
       - pylint
+      - PySide6
+      - pywinpty
+      - pyte
+      - psutil
