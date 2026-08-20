@@ -85,8 +85,12 @@ toolkit/
 │   │   ├── txt.py              plain text import/export
 │   │   ├── xml.py              XML import (lxml) - flattens records/attrs/nested elements into
 │   │   │                       list-of-lists; no XML export
-│   │   └── dispatch.py         consolidated data_import()/data_export() (xlsx/csv/txt/xml import,
-│   │                           xlsx/csv/txt export only, format auto-detected from extension)
+│   │   ├── archive.py          .tar.gz/.tgz archive handling: decompress_xml_archive() (extract
+│   │   │                       everything to disk) and xml_archive_import() (flatten every XML
+│   │   │                       member, reusing xml.py's engine directly); no archive export
+│   │   └── dispatch.py         consolidated data_import()/data_export() (xlsx/csv/txt/xml/
+│   │                           xml_archive import, xlsx/csv/txt export only, format
+│   │                           auto-detected from extension)
 │   └── tables/
 │       ├── columns.py          single-column extraction, Excel column-letter conversion
 │       ├── preview.py          data_preview(), single_col_analysis(), the _guess_var() heuristic
@@ -118,13 +122,15 @@ up" by moving them into the package.
 ## Data import/export
 
 `data_import()`/`data_export()` in `tedtoolkit/io/dispatch.py` are the blessed entry points —
-they auto-detect xlsx/csv/txt/xml (import) or xlsx/csv/txt (export) from the file extension
-(prompting if ambiguous), support Excel sheet selection, and are fully scriptable via kwargs with
-GUI-prompt fallback when kwargs are missing. `xlsx_import`/`xlsx_export`/`csv_import`/
-`csv_export`/`xml_import` remain public (not just internal helpers) since existing saved scripts
-may call them directly for their non-prompting return shapes. **Zip/password-protected CSV
-import was deliberately dropped** during the 2026 refactor (it was already broken — Python-2-only
-code) and is not coming back without a specific ask.
+they auto-detect xlsx/csv/txt/xml/xml_archive (import) or xlsx/csv/txt (export) from the file
+extension (prompting if ambiguous), support Excel sheet selection, and are fully scriptable via
+kwargs with GUI-prompt fallback when kwargs are missing. `xlsx_import`/`xlsx_export`/
+`csv_import`/`csv_export`/`xml_import`/`xml_archive_import` remain public (not just internal
+helpers) since existing saved scripts may call them directly for their non-prompting return
+shapes. **Zip/password-protected CSV import was deliberately dropped** during the 2026 refactor
+(it was already broken — Python-2-only code) and is not coming back without a specific ask —
+unrelated to, and not to be confused with, the newer `.tar.gz`+XML archive support below, which
+uses stdlib `tarfile` and has no connection to that old, removed zip/CSV path.
 
 `xml_import()` (`tedtoolkit/io/xml.py`, added 2026, `lxml`-backed) is import-only — no XML export
 exists. XML doesn't map onto a table the way csv/xlsx rows do, so most of the module is a
@@ -141,6 +147,27 @@ skipping non-XML files with a warning), raw XML bytes/str, or a file-like object
 subset (`source`, `record_path`, `list_strategy`, `max_depth`, `namespace_mode`, `on_malformed`,
 `low_memory`, `header_row`) is interactively prompted-and-baked; the rest are silent, fully
 scriptable `kwargs.get()` defaults — see the module docstring's "Guided-function note" for why.
+Two pieces of that kwarg-resolution/bulk-import logic (`_resolve_flatten_kwargs()`,
+`_xml_import_bulk_core_from_sources()`) were deliberately factored out of the folder-of-files
+bulk-import path specifically so `tedtoolkit/io/archive.py` (below) could reuse them rather than
+duplicate them — don't inline them back into `xml_import()`'s wrapper/core without checking
+`archive.py`'s imports first.
+
+`tedtoolkit/io/archive.py` (added 2026, stdlib `tarfile`-backed, no new dependency) adds `.tar.gz`/
+`.tgz` archive handling for bundles of XML files, in two independent guided functions:
+`decompress_xml_archive()` extracts every member of an archive to a destination folder as-is
+(no XML filtering — this is a raw "unpack the archive" utility, not tied to XML at all beyond the
+name), using `tarfile`'s `filter='data'` extraction mode (Python 3.12+, this project's pinned
+version) to close the classic `extractall()` path-traversal hole rather than relying on its old,
+unsafe implicit default. It is standalone and **not** wired into `data_import()`/`data_export()`.
+`xml_archive_import()` flattens every `*.xml` member inside an archive into a table (non-XML
+members skipped with a warning, exactly like `xml_import()`'s folder-of-files bulk mode), taking
+the exact same flattening kwargs as `xml_import()` and returning `dict[member_name] -> table` —
+it *is* wired into `data_import()`, auto-detected via a `.tar.gz`/`.tgz` extension (`process_as=
+'xml_archive'`). Each archive member is read fully into memory as bytes, one member at a time
+(never the whole archive at once), before being handed to `xml_import()`'s flattening engine as
+if it were a raw-bytes `source` — necessary because a tar/gzip member's own stream isn't
+independently seekable, which `low_memory=True`'s `record_path=None` auto-detection needs to be.
 
 ## Known gaps (do not silently "fix" these — see CLAUDE.md's bug-fix philosophy)
 
