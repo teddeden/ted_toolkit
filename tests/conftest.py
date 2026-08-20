@@ -4,7 +4,7 @@ import readline
 
 import pytest
 
-from tests.fixtures import sample_tables, xml_samples
+from tests.fixtures import sample_tables, xml_samples, archive_samples
 
 
 @pytest.fixture(autouse=True)
@@ -97,3 +97,23 @@ def context_xml():
 @pytest.fixture
 def flat_records_xml():
     return xml_samples.flat_records_xml()
+
+
+@pytest.fixture
+def orders_archive_bytes():
+    return archive_samples.orders_archive_bytes()
+
+
+@pytest.fixture
+def single_member_archive_bytes():
+    return archive_samples.single_member_archive_bytes()
+
+
+@pytest.fixture
+def no_xml_archive_bytes():
+    return archive_samples.no_xml_archive_bytes()
+
+
+@pytest.fixture
+def malformed_member_archive_bytes():
+    return archive_samples.malformed_member_archive_bytes()
