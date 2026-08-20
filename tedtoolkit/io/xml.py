@@ -62,26 +62,14 @@ class _FlattenContext:
 # Guided wrapper
 # ---------------------------------------------------------------------------
 
-def _parse_xml_args(**kwargs):
-    '''Resolve every xml_import() kwarg - taking it as given, or prompting + baking into history
-    for the curated subset described in the module docstring. kwargs may include the
-    internal-use-only '_caller_fn_name', set by data_import() so prompted-for values are baked
-    into the caller's history line, not xml_import's (mirrors _parse_csv_args's contract).'''
-    fn_name = kwargs.pop('_caller_fn_name', 'xml_import')
-
-    source = kwargs.get('source', None)
-    if source is None:
-        if ask_yn(default='n', prompt='Import a folder of XML files instead of a single file?'):
-            source = g_sel_folder(title='xml_import(): select folder of XML files')
-        else:
-            source = g_sel_file(title='xml_import(): select XML file',
-                                filetypes=[('XML files', ('*.xml')), ('All files', ('*.*'))])
-        if not source:
-            print('No source selected: xml_import() cancelled.\n')
-            return None
-        if 'source' not in kwargs:
-            _add_kwarg_to_last_command('source', _quoted(source), fn_name=fn_name)
-
+def _resolve_flatten_kwargs(kwargs, fn_name):
+    '''Resolve every xml-flattening kwarg EXCEPT the source-like kwarg itself (xml_import()'s
+    `source`, xml_archive_import()'s `archive_path`) - the curated subset via prompting, the rest
+    via silent kwargs.get() defaults (see the module docstring's "Guided-function note" for why
+    only a curated subset is prompted at all). Shared between xml_import()'s and
+    xml_archive_import()'s wrappers (tedtoolkit/io/archive.py), which differ only in how they
+    resolve their one source-like kwarg - everything else about "flatten XML into a table" is
+    identical between them, so this is the single place that logic lives.'''
     record_path = kwargs.get('record_path', None)
     if 'record_path' not in kwargs:
         described = record_path if record_path is not None else \
@@ -123,7 +111,6 @@ def _parse_xml_args(**kwargs):
                  if 'header_row' not in kwargs else kwargs['header_row']
 
     return {
-        'source': source,
         'record_path': record_path,
         'max_depth': max_depth,
         'residual_format': kwargs.get('residual_format', 'xml'),
@@ -148,6 +135,31 @@ def _parse_xml_args(**kwargs):
         'return_metadata': kwargs.get('return_metadata', False),
         'low_memory': low_memory,
     }
+
+
+def _parse_xml_args(**kwargs):
+    '''Resolve every xml_import() kwarg - taking it as given, or prompting + baking into history
+    for the curated subset described in the module docstring. kwargs may include the
+    internal-use-only '_caller_fn_name', set by data_import() so prompted-for values are baked
+    into the caller's history line, not xml_import's (mirrors _parse_csv_args's contract).'''
+    fn_name = kwargs.pop('_caller_fn_name', 'xml_import')
+
+    source = kwargs.get('source', None)
+    if source is None:
+        if ask_yn(default='n', prompt='Import a folder of XML files instead of a single file?'):
+            source = g_sel_folder(title='xml_import(): select folder of XML files')
+        else:
+            source = g_sel_file(title='xml_import(): select XML file',
+                                filetypes=[('XML files', ('*.xml')), ('All files', ('*.*'))])
+        if not source:
+            print('No source selected: xml_import() cancelled.\n')
+            return None
+        if 'source' not in kwargs:
+            _add_kwarg_to_last_command('source', _quoted(source), fn_name=fn_name)
+
+    resolved = _resolve_flatten_kwargs(kwargs, fn_name)
+    resolved['source'] = source
+    return resolved
 
 
 def xml_import(**kwargs):
@@ -338,58 +350,82 @@ def _xml_import_bulk_core(folder, *, record_path, opts, header_row, column_order
         print('xml_import(): WARNING: no .xml files found in folder <{}>.'.format(folder))
         return {}
 
+    named_sources = [(fname, os.path.join(folder, fname)) for fname in xml_files]
+    results = _xml_import_bulk_core_from_sources(named_sources, record_path=record_path,
+        opts=opts, header_row=header_row, column_order=column_order, max_columns=max_columns,
+        max_rows=max_rows, on_malformed=on_malformed, empty_value=empty_value,
+        return_metadata=return_metadata, low_memory=low_memory, item_noun='file')
+
+    print('\nxml_import(): bulk import complete. {} XML file(s) processed, {} non-XML file(s) '
+          'skipped.\n'.format(len(xml_files), len(skipped)))
+    return results
+
+
+def _xml_import_bulk_core_from_sources(named_sources, *, record_path, opts, header_row,
+                                       column_order, max_columns, max_rows, on_malformed,
+                                       empty_value, return_metadata, low_memory,
+                                       item_noun='file'):
+    '''Shared bulk-import engine: named_sources is a list of (name, source) pairs, where each
+    source is anything _as_parse_input() accepts (a path or raw bytes). Returns
+    dict[name] -> table (or (table, metadata) if return_metadata) - built once here and reused by
+    both xml_import()'s folder-of-files bulk mode (_xml_import_bulk_core above, source = each
+    file's path) and xml_archive_import()'s archive-member bulk mode
+    (tedtoolkit/io/archive.py, source = each member's raw bytes), so column_order='stable''s
+    cross-item column-unification logic is written and tested exactly once. The caller is
+    responsible for filtering out non-XML entries and printing skip-warnings/an empty-input
+    warning BEFORE calling this - this function only processes what it's given, and does not
+    print a final summary line (each caller's summary wording differs - "files" vs "members" -
+    see _xml_import_bulk_core above for that pattern).'''
     results = OrderedDict()
+    if not named_sources:
+        return results
 
     if column_order == 'stable':
-        # Pass 1/2: extract every file's rows and discover its columns, WITHOUT materializing a
-        # table yet, so the unified column set can be computed across the whole folder first.
-        per_file = OrderedDict()
+        # Pass 1/2: extract every item's rows and discover its columns, WITHOUT materializing a
+        # table yet, so the unified column set can be computed across the whole batch first.
+        per_item = OrderedDict()
         unified_columns = OrderedDict()
-        with click.progressbar(xml_files, fill_char='*', empty_char=' ',
-                               label='Discovering XML schema (pass 1/2)') as files:
-            for fname in files:
-                path = os.path.join(folder, fname)
+        with click.progressbar(named_sources, fill_char='*', empty_char=' ',
+                               label='Discovering XML schema (pass 1/2)') as items:
+            for name, source in items:
                 ctx = _FlattenContext()
                 try:
                     if low_memory:
-                        row_dicts = _extract_rows_streaming(path, record_path, opts, ctx,
+                        row_dicts = _extract_rows_streaming(source, record_path, opts, ctx,
                                                             max_rows, on_malformed)
                     else:
-                        row_dicts = _extract_rows_full(path, record_path, opts, ctx, max_rows,
+                        row_dicts = _extract_rows_full(source, record_path, opts, ctx, max_rows,
                                                        on_malformed)
                 except etree.XMLSyntaxError as exc:
                     if on_malformed == 'raise':
                         raise
                     ctx.add_warning('malformed XML in <{}>, document skipped: {}'.format(
-                        fname, exc))
+                        name, exc))
                     row_dicts = []
-                per_file[fname] = (row_dicts, ctx)
+                per_item[name] = (row_dicts, ctx)
                 unified_columns.update((c, None) for c in ctx.discovered_paths)
         unified_columns, truncated = _apply_max_columns(list(unified_columns), max_columns)
 
-        with click.progressbar(list(per_file.items()), fill_char='*', empty_char=' ',
+        with click.progressbar(list(per_item.items()), fill_char='*', empty_char=' ',
                                label='Writing tables (pass 2/2)') as items:
-            for fname, (row_dicts, ctx) in items:
+            for name, (row_dicts, ctx) in items:
                 if truncated:
-                    ctx.add_warning('max_columns={} exceeded across the folder; extra columns '
-                                    'dropped'.format(max_columns))
+                    ctx.add_warning('max_columns={} exceeded across the combined {}s; extra '
+                                    'columns dropped'.format(max_columns, item_noun))
                 table = _materialize_table(row_dicts, unified_columns, header_row, empty_value)
                 metadata = _build_metadata(ctx, len(row_dicts))
-                _print_import_stats(fname, metadata, len(unified_columns))
-                results[fname] = (table, metadata) if return_metadata else table
+                _print_import_stats(name, metadata, len(unified_columns))
+                results[name] = (table, metadata) if return_metadata else table
     else:
-        with click.progressbar(xml_files, fill_char='*', empty_char=' ',
-                               label='Importing XML files') as files:
-            for fname in files:
-                path = os.path.join(folder, fname)
-                results[fname] = _xml_import_single_core(path, record_path=record_path,
+        with click.progressbar(named_sources, fill_char='*', empty_char=' ',
+                               label='Importing XML {}s'.format(item_noun)) as items:
+            for name, source in items:
+                results[name] = _xml_import_single_core(source, record_path=record_path,
                     opts=opts, header_row=header_row, column_order=column_order,
                     max_columns=max_columns, max_rows=max_rows, on_malformed=on_malformed,
                     empty_value=empty_value, return_metadata=return_metadata,
-                    low_memory=low_memory, label=fname)
+                    low_memory=low_memory, label=name)
 
-    print('\nxml_import(): bulk import complete. {} XML file(s) processed, {} non-XML file(s) '
-          'skipped.\n'.format(len(xml_files), len(skipped)))
     return results
 
 
