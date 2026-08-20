@@ -24,6 +24,7 @@ from .io.xlsx import *
 from .io.csv import *
 from .io.txt import *
 from .io.xml import *
+from .io.archive import *
 from .io.dispatch import *
 from .tables.columns import *
 from .tables.preview import *

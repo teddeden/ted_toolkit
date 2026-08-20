@@ -53,6 +53,7 @@ from tedtoolkit.tables.compare import (try_compare_columns, compare_columns,
 from tedtoolkit.io.xlsx import xlsx_export, xlsx_import, ask_select_sheet, ALL_SHEETS_TEXT
 from tedtoolkit.io.csv import csv_export, csv_import
 from tedtoolkit.io.xml import xml_import
+from tedtoolkit.io.archive import decompress_xml_archive, xml_archive_import
 from tedtoolkit.io.dispatch import data_import, data_export
 from tedtoolkit.gui.messagebox import (g_ask_yn, g_ask_okcancel, g_conditional_stop,
                                         g_show_info, g_show_warning, g_show_error)
@@ -77,6 +78,8 @@ FUNCTION_CATEGORIES = {
     'csv_export': 'Input / Output',
     'csv_import': 'Input / Output',
     'xml_import': 'Input / Output',
+    'decompress_xml_archive': 'Input / Output',
+    'xml_archive_import': 'Input / Output',
     'data_export': 'Input / Output',
     'data_import': 'Input / Output',
     'ask_select_sheet': 'User Input (text)',
