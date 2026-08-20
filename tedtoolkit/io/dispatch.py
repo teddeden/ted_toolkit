@@ -119,8 +119,8 @@ def data_import(**kwargs):
     if not file_path or not (os.path.isfile(file_path) or os.path.isdir(file_path)):
         file_path = g_sel_file(title=kwargs.get('gui_prompt', 'data_import(): select file'),
                                initialdir=LAST_PATH,
-                               filetypes=[('Data files',
-                                          ('*.xlsx', '*.csv', '*.txt', '*.xml', '*.tar.gz', '*.tgz')),
+                               filetypes=[('Data files', ('*.xlsx', '*.csv', '*.txt', '*.xml',
+                                                          '*.tar.gz', '*.tgz')),
                                           ('All files', ('*.*'))])
         if not file_path:
             print('No file selected: data import cancelled.\n')
