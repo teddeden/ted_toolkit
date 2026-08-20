@@ -58,7 +58,7 @@ from tedtoolkit.io.dispatch import data_import, data_export
 from tedtoolkit.gui.messagebox import (g_ask_yn, g_ask_okcancel, g_conditional_stop,
                                         g_show_info, g_show_warning, g_show_error)
 
-VERSION = "0.74"
+VERSION = "0.75"
 
 FUNCTION_CATEGORIES = {
     'ask_num': 'User Input (text)',
