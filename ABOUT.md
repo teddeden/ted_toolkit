@@ -77,8 +77,10 @@ toolkit/
 │   ├── clipboard.py           Windows clipboard I/O (win_copy/win_paste/*_table)
 │   ├── introspect.py          dynamic_import() and the function-reference helpers help_all()/save_function_reference() build on
 │   ├── gui/
-│   │   ├── dialogs.py          tkinter file/folder picker dialogs (g_sel_file, g_sel_file_to_write, g_sel_folder)
-│   │   └── messagebox.py       tkinter messagebox wrappers (g_ask_yn, g_ask_okcancel, g_conditional_stop, g_show_*)
+│   │   ├── dialogs.py          tkinter file/folder picker dialogs (g_sel_file, g_sel_file_to_write, g_sel_folder, g_sel_files)
+│   │   ├── messagebox.py       tkinter messagebox wrappers (g_ask_yn, g_ask_okcancel, g_conditional_stop, g_show_*)
+│   │   └── image_viewer.py     resizable in-memory image gallery (g_show_image_gallery) - Prev/Next
+│   │                           navigation, used by qr_encode()'s output_type='gui' path
 │   ├── io/
 │   │   ├── xlsx.py             Excel import/export (openpyxl) + core split, ask_select_sheet
 │   │   ├── csv.py              CSV import/export + core split, _parse_csv_args
@@ -88,6 +90,10 @@ toolkit/
 │   │   ├── archive.py          .tar.gz/.tgz archive handling: decompress_xml_archive() (extract
 │   │   │                       everything to disk) and xml_archive_import() (flatten every XML
 │   │   │                       member, reusing xml.py's engine directly); no archive export
+│   │   ├── qr.py               visual-channel (QR code) encode/decode: qr_encode()/qr_decode() -
+│   │   │                       turn UTF-8 text/binary content into one or more QR-code images
+│   │   │                       (files or an in-memory GUI gallery) and back; see "Visual channel
+│   │   │                       (QR code) encode/decode" below
 │   │   └── dispatch.py         consolidated data_import()/data_export() (xlsx/csv/txt/xml/
 │   │                           xml_archive import, xlsx/csv/txt export only, format
 │   │                           auto-detected from extension)
@@ -168,6 +174,55 @@ it *is* wired into `data_import()`, auto-detected via a `.tar.gz`/`.tgz` extensi
 (never the whole archive at once), before being handed to `xml_import()`'s flattening engine as
 if it were a raw-bytes `source` — necessary because a tar/gzip member's own stream isn't
 independently seekable, which `low_memory=True`'s `record_path=None` auto-detection needs to be.
+
+## Visual channel (QR code) encode/decode
+
+`tedtoolkit/io/qr.py` (added 2026) adds `qr_encode()`/`qr_decode()`: turn arbitrary UTF-8 text or
+binary content into one or more QR-code images (files on disk, or an in-memory GUI gallery via
+`tedtoolkit/gui/image_viewer.py`'s `g_show_image_gallery()` - nothing written to disk in that
+case), and reverse the process from one or more QR images back into the original content,
+restoring the original file name when the source was a file. It is **not** wired into
+`data_import()`/`data_export()`'s format dispatch - a `.png` isn't an unambiguous "this is a QR
+code" signal the way `.tar.gz` is for XML archives, so these stay standalone guided functions the
+user calls directly.
+
+Three new dependencies back this (see `environment.yml`): `Pillow` (QR image generation/gallery
+rendering), `qrcode` (pure-Python QR generation, returns PIL images directly), and
+`opencv-python` (`cv2.QRCodeDetector` for image -> text decoding, chosen for its use in the
+"general-use QR decoding" requirement over `pyzbar`). `opencv-python` pulls in `numpy`
+transitively via its own wheel - this does **not** conflict with the "no pandas/numpy" rule
+elsewhere in this codebase (see "What this is" above), which is specifically about the **tabular
+data model** (lists-of-lists); `numpy` here is purely an internal detail of `cv2`'s image-array
+API, never a representation of table data.
+
+**Container format**: every QR code `qr_encode()` generates carries a small pipe-delimited
+envelope: `TTKQR1|<session_id>|<seq>/<total>|<content_encoding>|<original_filename>|<payload_text>`.
+`|` never appears in base64/uuencode output or in any header field generated here, so a
+fixed-count `str.split('|', maxsplit=5)` safely separates header from payload on decode.
+`session_id` groups a multi-code encode call's chunks together (so `qr_decode()` can reassemble
+them even out of order or mixed with unrelated codes); `content_encoding` is `'utf8'` when the
+source content is valid UTF-8 text (the payload IS the content - no binary-to-text expansion
+needed), else `'base64'`/`'uuencode'` per the `encoding_type` kwarg. A QR payload that does **not**
+start with the `TTKQR1` magic prefix is treated as a foreign/generic QR code (e.g. from another
+app) and its raw decoded text is returned as-is, with no chunk/session reconstruction applied -
+this is the "general-use QR decoding" path.
+
+**Reliability: why every generated image is self-verified before being accepted.** OpenCV's
+classical `QRCodeDetector` (no neural/contrib model involved) is measurably unreliable at high QR
+versions/data density - empirically, dense codes near a given `error_correction` level's max
+capacity often fail to decode on the first rendering, and this was not simply a function of
+version number (identical-length payloads at the same version sometimes decoded, sometimes
+didn't). QR's 8 standard mask patterns (0-7) are an information-*preserving* encoding choice -
+they don't change what the code contains, only which of 8 fixed patterns XORs the data modules -
+and empirically, at least one of the 8 decodes reliably even when others don't. So
+`_qr_encode_core()` renders each chunk, decodes it right back with the same `cv2` detector
+`qr_decode()` uses, and only accepts the first mask pattern that round-trips correctly; if
+genuinely none of the 8 do (not observed in testing, even at max version/`error_correction='H'`),
+it shrinks the per-chunk capacity and re-chunks, which always eventually succeeds since small/
+low-version codes proved reliable in testing. This makes encoding slower than a naive
+single-render approach (worst case up to 8x the render+decode cost per chunk, noticeable for
+large binary content at high `error_correction` levels) but guarantees `qr_encode()`'s own output
+is actually decodable rather than merely well-formed.
 
 ## Known gaps (do not silently "fix" these — see CLAUDE.md's bug-fix philosophy)
 
@@ -290,6 +345,10 @@ out what the automated suite structurally cannot exercise:
   these are one-line wrappers around blocking native dialogs; not unit tested by design.
 - Excel COM automation (`view_in_excel=True` opening a real Excel window via `win32com`).
 - Windows clipboard I/O (`win_copy`/`win_paste`/`*_table`).
+- `g_show_image_gallery()` (`tedtoolkit/gui/image_viewer.py`) - the resizable QR-code preview
+  window `qr_encode()` opens for `output_type='gui'` (real Tk window, live resize/rescale, Prev/
+  Next button and arrow-key interaction). `qr_encode()`'s wrapper-level tests monkeypatch this
+  function out entirely and assert on what it was *called with*, not on the window itself.
 
 Everything else — every guided function's core logic, the full xlsx/csv/txt import/export round
 trip, the history-rewrite/kwarg-baking contract — is covered by the automated `pytest` suite.
