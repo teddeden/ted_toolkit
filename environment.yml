@@ -14,6 +14,7 @@ dependencies:
   - chardet
   - pywin32
   - six
+  - pillow
   - pip:
       - pytest
       - pylint
@@ -21,3 +22,5 @@ dependencies:
       - pywinpty
       - pyte
       - psutil
+      - qrcode
+      - opencv-python
