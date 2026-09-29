@@ -20,11 +20,13 @@ from .util import *
 from .clipboard import *
 from .introspect import *
 from .gui.dialogs import *
+from .gui.image_viewer import *
 from .io.xlsx import *
 from .io.csv import *
 from .io.txt import *
 from .io.xml import *
 from .io.archive import *
+from .io.qr import *
 from .io.dispatch import *
 from .tables.columns import *
 from .tables.preview import *

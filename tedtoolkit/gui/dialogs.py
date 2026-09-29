@@ -63,6 +63,28 @@ def g_sel_file_to_write(**kwargs):
     return path
 
 
+def g_sel_files(**kwargs):
+    '''Graphical multi-file selection via tkinter;
+    returns a tuple of paths (empty tuple if cancelled)'''
+    gui = Tk()
+    gui.focus_force()
+    paths = tkFileDialog.askopenfilenames(
+        title=kwargs.get('title', 'Open file(s)'),
+        filetypes=kwargs.get('filetypes',
+                             [('All Files', ('*.*')),
+                              ('Excel files', ('*.xlsx')),
+                              ('CSV files', ('*.csv')),
+                              ('Text files', ('*.txt'))]),
+        initialdir=kwargs.get('initialdir', os.getcwd()),
+        parent=gui
+        )
+    gui.withdraw()
+    if not paths: #User cancels dialog
+        print('User canceled file select dialog. Aborting')
+        return ()
+    return paths
+
+
 def g_sel_folder(**kwargs):
     '''Graphical folder selection via tkinter
         Returns path as string'''

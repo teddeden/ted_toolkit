@@ -19,9 +19,17 @@ KNOWN_UNTESTABLE = [
      'pyreadline3 hooks the Windows console directly; there is no way to simulate real '
      'keystrokes from a non-interactive test process. Verify by hand: run '
      'start_ted_toolkit.bat, type a command, press Up, confirm it is recalled.'),
-    ('tkinter file/folder picker dialogs (g_sel_file, g_sel_file_to_write, g_sel_folder)',
+    ('tkinter file/folder picker dialogs (g_sel_file, g_sel_file_to_write, g_sel_folder, '
+     'g_sel_files)',
      'One-line wrappers around blocking native dialogs; not unit tested by design '
      '(see ABOUT.md). Verify by hand if changed.'),
+    ('g_show_image_gallery() - the resizable QR-code preview gallery window (qr_encode(), '
+     'output_type=\'gui\')',
+     'Requires a real Tk window, live resize/rescale behavior, and Prev/Next button/arrow-key '
+     'interaction; qr_encode()\'s wrapper-level tests monkeypatch this function out entirely. '
+     'Verify by hand: qr_encode(input_source_type=\'string\', input_source=\'hello\', '
+     'output_type=\'gui\'), confirm the window opens, resizes cleanly with the image scaling to '
+     'fit, and Prev/Next (buttons and arrow keys) cycle through multiple codes showing "i of n".'),
     ('tkinter messagebox popups (g_ask_yn, g_ask_okcancel, g_conditional_stop, g_show_*)',
      'Same as above - thin wrappers around blocking native dialogs.'),
     ('Excel COM automation (view_in_excel=True opening a real Excel window)',
