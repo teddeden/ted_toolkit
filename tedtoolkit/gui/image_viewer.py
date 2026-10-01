@@ -31,7 +31,16 @@ def g_show_image_gallery(images, **kwargs):
         return
 
     window_title = kwargs.get('window_title', 'QR code preview')
-    state = {'index': 0}
+    state = {'index': 0, 'pending_resize': None}
+    # Every PhotoImage ever rendered is kept alive here for the window's lifetime (trimmed to the
+    # last few). A window fires several <Configure> events in a rapid burst while first being laid
+    # out/positioned by the window manager; relying on a single `image_label.image = photo`
+    # reference (the usual tkinter idiom) lets Python's refcounting tear down an EARLIER photo's
+    # underlying Tcl image in the middle of that burst, which can race with a still-in-flight
+    # configure() call and raise "image pyimageN doesn't exist". Never dropping a photo's last
+    # reference until well after it could possibly still be in use sidesteps the race entirely -
+    # the memory cost is negligible for a gallery of small QR-code images.
+    photo_cache = []
 
     root = tk.Tk()
     root.title(window_title)
@@ -52,6 +61,7 @@ def g_show_image_gallery(images, **kwargs):
     next_button.pack(side=tk.LEFT, padx=8)
 
     def _render():
+        state['pending_resize'] = None
         img = images[state['index']]
         avail_w = max(image_label.winfo_width(), 50)
         avail_h = max(image_label.winfo_height(), 50)
@@ -59,9 +69,17 @@ def g_show_image_gallery(images, **kwargs):
         new_size = (max(1, int(img.width * scale)), max(1, int(img.height * scale)))
         resized = img.resize(new_size, Image.LANCZOS)
         photo = ImageTk.PhotoImage(resized)
+        photo_cache.append(photo)
+        del photo_cache[:-4]
         image_label.configure(image=photo)
-        image_label.image = photo  # keep a reference - tkinter drops it otherwise
         counter_label.configure(text='{} of {}'.format(state['index'] + 1, len(images)))
+
+    def _on_configure(_event=None):
+        # Debounced: re-render once layout settles rather than once per intermediate event in
+        # that initial burst (also reduces how often the race above could even be triggered).
+        if state['pending_resize'] is not None:
+            root.after_cancel(state['pending_resize'])
+        state['pending_resize'] = root.after(50, _render)
 
     def _go_prev(_event=None):
         state['index'] = (state['index'] - 1) % len(images)
@@ -75,6 +93,6 @@ def g_show_image_gallery(images, **kwargs):
     next_button.configure(command=_go_next)
     root.bind('<Left>', _go_prev)
     root.bind('<Right>', _go_next)
-    image_label.bind('<Configure>', lambda _event: _render())
+    image_label.bind('<Configure>', _on_configure)
 
     root.mainloop()
