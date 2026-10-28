@@ -51,14 +51,15 @@ every guided function follows, known gaps, and the do-not-touch list), see [ABOU
 
 ## Setup
 
+See **[GETTING_STARTED.md](GETTING_STARTED.md)** for full instructions, covering conda
+(`environment.yml`) and standard python.org Python + pip (`requirements.txt`). The quickest
+route is to double-click `setup_toolkit.bat`. It creates the environment and writes a git-ignored
+`local_env.cmd`, which `start_ted_toolkit.bat` and `regression_test.bat` use to activate it.
+Without that file, the launchers fall back to the original hardcoded conda paths.
+
 ```
 conda env create -n toolkit-env -f environment.yml
 ```
-
-`start_ted_toolkit.bat` currently hardcodes this machine's conda install path, environment path,
-and toolkit checkout path. If you're setting this up on a different machine, edit the three paths
-in `start_ted_toolkit.bat` to match your own conda installation, environment location, and where
-you cloned this repo.
 
 ## Running it
 

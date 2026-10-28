@@ -65,6 +65,16 @@ KNOWN_UNTESTABLE = [
      'Depends on real psutil.Process CPU sampling against live spawned processes over multiple '
      'poll ticks; verified manually by running a CPU-heavy command and watching the tab dot and '
      'status bar respond.'),
+    ('setup_toolkit.bat / setup_toolkit.ps1 (environment creation, local_env.cmd)',
+     'Creates real conda/venv environments and downloads packages. Verify by hand: run '
+     'setup_toolkit.bat on a clean machine (both flows), then confirm start_ted_toolkit.bat '
+     'and regression_test.bat pick up the generated local_env.cmd.'),
+    ('save_session() / restore_session() file dialogs and the CLI conflict prompt in a real '
+     'console',
+     'The save/restore logic, history handling and conflict detection are unit tested; the '
+     'g_sel_file*/ask_select interaction and up-arrow recall of restored history need a real '
+     'console. Verify by hand: save_session(), restore into a new window with a conflicting '
+     'variable, try abort and overwrite, press Up.'),
 ]
 
 

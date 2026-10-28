@@ -66,8 +66,11 @@ This means:
 
 ```
 toolkit/
-├── start_ted_toolkit.bat     launcher: activates conda env, runs `python -i ted_toolkit.py`
+├── start_ted_toolkit.bat     launcher: activates the env (local_env.cmd if present, else hardcoded conda), runs `python -i ted_toolkit.py`
 ├── environment.yml           conda environment spec (python=3.12, pinned - see CLAUDE.md)
+├── requirements.txt          pip equivalent of environment.yml (python.org 3.12 + venv flow) - keep both in sync
+├── setup_toolkit.bat/.ps1    guided env setup (conda or venv), writes git-ignored local_env.cmd - see GETTING_STARTED.md
+├── GETTING_STARTED.md        installation guide (both flows, launcher configuration, troubleshooting)
 ├── ted_toolkit.py            thin session launcher - see its own module docstring
 ├── tedtoolkit/                the actual package
 │   ├── history.py             readline history-rewrite primitives (input(), _add_kwarg_to_last_command, _check_assignment, ...)

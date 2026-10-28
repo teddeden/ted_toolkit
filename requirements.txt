@@ -1,0 +1,35 @@
+# Ted's Toolkit - pip requirements (alternative to the conda environment.yml).
+#
+# REQUIRES PYTHON 3.12 EXACTLY (python.org Windows installer). Do NOT use 3.13+: its new
+# default REPL bypasses the pyreadline3 hook that the toolkit's history capture/replay
+# depends on. See GETTING_STARTED.md for the full install walk-through.
+#
+#   py -3.12 -m venv ..\toolkit-venv
+#   ..\toolkit-venv\Scripts\python -m pip install -r requirements.txt
+#
+# Kept in sync with environment.yml by hand: add new dependencies to BOTH files.
+# (environment.yml's conda-only packages - openssl, sqlite, vc - ship with the python.org
+# installer and are not needed here.)
+
+# Core toolkit
+click
+openpyxl
+lxml
+pyreadline3
+chardet
+pywin32
+six
+pillow
+qrcode
+opencv-python
+
+# Testing / linting
+pytest
+pylint
+
+# Desktop GUI shell (toolkit_gui/) - note the GUI launcher currently supports the conda
+# environment only; these are still installed so the regression suite can run its tests.
+PySide6
+pywinpty
+pyte
+psutil
