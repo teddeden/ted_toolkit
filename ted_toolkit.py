@@ -39,7 +39,7 @@ from tedtoolkit.util import (elapsed, get_utc_timestamp, get_local_timestamp, ge
                               _find_notepad_pp, beep, set_window_title, timer_start, timer_elapsed)
 from tedtoolkit.clipboard import win_copy, win_paste, win_paste_table, win_copy_table
 from tedtoolkit.introspect import (dynamic_import, _get_function_declaration, _get_module_functions,
-                                    DYNAMIC_IMPORTS)
+                                    _preview_repr, DYNAMIC_IMPORTS)
 from tedtoolkit.gui.dialogs import g_sel_file, g_sel_file_to_write, g_sel_folder
 from tedtoolkit.io.txt import read_txt
 from tedtoolkit.tables.columns import extract_column_from_table, sel_col, _decimate, excel_column
@@ -245,7 +245,7 @@ def help_vars(exclude_globals=True):
             continue
         spacer = "   " if len(item) < 24 else "..."
         item_type = eval(item).__class__.__name__
-        preview = str(repr(eval(item)))
+        preview = _preview_repr(eval(item))
         print(f'  {item[:23]:<23}{spacer}{item_type[:18]:<18} {preview[:40]:<40}')
     if DYNAMIC_IMPORTS:
         for mod_name in DYNAMIC_IMPORTS:
@@ -261,7 +261,7 @@ def help_vars(exclude_globals=True):
                 ref = eval(handle)
                 spacer = "   " if len(handle) < 24 else "..."
                 item_type = ref.__class__.__name__
-                preview = str(repr(ref))
+                preview = _preview_repr(ref)
                 print(f'  {handle[:23]:<23}{spacer}{item_type[:18]:<18} {preview[:40]:<40}')
     print('\n')
 help_vars.desc = 'Show all current variables of common types'
