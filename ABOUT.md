@@ -74,7 +74,8 @@ toolkit/
 │   ├── validation.py          table-shape checks (_is_list_of_lists, _check_var_table)
 │   ├── prompts.py             console prompt primitives (ask_yn, ask_num, ask_select, ...) and the _kwarg_parse_prompt_* wrappers
 │   ├── util.py                elapsed(), timer_start()/timer_elapsed() benchmarking, timestamps, get_current_user, beep, set_window_title
-│   ├── clipboard.py           Windows clipboard I/O (win_copy/win_paste/*_table)
+│   ├── clipboard.py           Windows clipboard I/O (win_copy/win_paste/*_table) + win_copy_pickle/win_paste_pickle
+│   │                           (any object <-> compressed pickled ASCII text, via clipboard or .txt file)
 │   ├── introspect.py          dynamic_import() and the function-reference helpers help_all()/save_function_reference() build on
 │   ├── gui/
 │   │   ├── dialogs.py          tkinter file/folder picker dialogs (g_sel_file, g_sel_file_to_write, g_sel_folder, g_sel_files)
@@ -344,7 +345,8 @@ out what the automated suite structurally cannot exercise:
 - tkinter file/folder dialogs and messagebox popups (`g_sel_file*`, `g_ask_*`, `g_show_*`) —
   these are one-line wrappers around blocking native dialogs; not unit tested by design.
 - Excel COM automation (`view_in_excel=True` opening a real Excel window via `win32com`).
-- Windows clipboard I/O (`win_copy`/`win_paste`/`*_table`).
+- Windows clipboard I/O (`win_copy`/`win_paste`/`*_table`, and the clipboard path of
+  `win_copy_pickle`/`win_paste_pickle` - their text format and file path are unit tested).
 - `g_show_image_gallery()` (`tedtoolkit/gui/image_viewer.py`) - the resizable QR-code preview
   window `qr_encode()` opens for `output_type='gui'` (real Tk window, live resize/rescale, Prev/
   Next button and arrow-key interaction). `qr_encode()`'s wrapper-level tests monkeypatch this

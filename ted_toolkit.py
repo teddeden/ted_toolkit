@@ -37,7 +37,8 @@ from tedtoolkit.prompts import (ask_yn, ask_num, ask_select, ask_select_column_i
                                  _kwarg_parse_prompt_num, _kwarg_parse_prompt_list)
 from tedtoolkit.util import (elapsed, get_utc_timestamp, get_local_timestamp, get_current_user,
                               _find_notepad_pp, beep, set_window_title, timer_start, timer_elapsed)
-from tedtoolkit.clipboard import win_copy, win_paste, win_paste_table, win_copy_table
+from tedtoolkit.clipboard import (win_copy, win_paste, win_paste_table, win_copy_table,
+                                  win_copy_pickle, win_paste_pickle)
 from tedtoolkit.introspect import (dynamic_import, _get_function_declaration, _get_module_functions,
                                     _preview_repr, DYNAMIC_IMPORTS)
 from tedtoolkit.gui.dialogs import g_sel_file, g_sel_file_to_write, g_sel_folder
@@ -94,6 +95,8 @@ FUNCTION_CATEGORIES = {
     'win_paste': 'Input / Output',
     'win_paste_table': 'Input / Output',
     'win_copy_table': 'Input / Output',
+    'win_copy_pickle': 'Input / Output',
+    'win_paste_pickle': 'Input / Output',
     'get_utc_timestamp': 'Utilities & Settings',
     'get_local_timestamp': 'Utilities & Settings',
     'ask_select_column_index': 'User Input (text)',

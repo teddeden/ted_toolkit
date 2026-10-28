@@ -35,7 +35,8 @@ KNOWN_UNTESTABLE = [
     ('Excel COM automation (view_in_excel=True opening a real Excel window)',
      'Requires a real Excel installation and a visible desktop session; not exercised by '
      'the automated suite.'),
-    ('Windows clipboard I/O (win_copy / win_paste / win_copy_table / win_paste_table)',
+    ('Windows clipboard I/O (win_copy / win_paste / win_copy_table / win_paste_table, and the '
+     'clipboard path of win_copy_pickle / win_paste_pickle)',
      'Requires a real Windows clipboard and, for paste, pre-populated clipboard content.'),
     ('data_recon() col_select=\'LIST\' with no columns kwarg, or col_mode=\'NAME\'',
      'Known gap, not a test-coverage gap: calls _sel_compare_cols()/_check_convert_text_cols(), '
