@@ -32,6 +32,7 @@ import traceback
 from tedtoolkit.history import (input, _quoted, _get_last_command, _get_previous_command,
                                  _add_kwarg_to_last_command, _remove_last_history_item,
                                  _remove_keyword_argument_from_last_command, _check_assignment)
+from tedtoolkit import history as _history_module
 from tedtoolkit.validation import _is_list_of_lists, _check_var_table
 from tedtoolkit.prompts import (ask_yn, ask_num, ask_select, ask_select_column_index,
                                  _prompt_for_any_arg, _prompt_for_list_arg, _prompt_for_bool_arg,
@@ -424,6 +425,7 @@ def _run_script(args_list, **kwargs):
     else:
         view_comments = _kwarg_parse_prompt_bool('view_comments', default_val='False', **kwargs)
         SCRIPT_RUNNING = True
+        _history_module.REPLAY_ACTIVE = True  # see tedtoolkit/history.py
         try:
             for ind, line in enumerate(py_content[LAST_LINE_ATTEMPTED+1:], start=LAST_LINE_ATTEMPTED+1):
                 LAST_LINE_ATTEMPTED = ind
@@ -459,6 +461,7 @@ def _run_script(args_list, **kwargs):
                         return
         finally:
             SCRIPT_RUNNING = False
+            _history_module.REPLAY_ACTIVE = False
     print(f'\nExecution completed in {elapsed()}.')
     print('\nDone- You may continue session from this point or you may exit()\n')
     print('For function reference type "help_all()"')

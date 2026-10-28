@@ -8,6 +8,12 @@ readline (pyreadline3, on Windows) history buffer.
 import readline
 import traceback
 
+# True while ted_toolkit.py's _run_script() is replaying a saved script. Lets a guided
+# function keep its historical, prompt-free behavior for old script lines that predate a
+# newer prompt (e.g. data_import()'s delimited-.txt detection). Read it at call time as
+# tedtoolkit.history.REPLAY_ACTIVE - never `from ... import` the bool itself.
+REPLAY_ACTIVE = False
+
 old_input = input
 def input(prompt):
     '''input from user without capturing to history'''

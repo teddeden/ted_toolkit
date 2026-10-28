@@ -80,7 +80,7 @@ class _PlainSetSubclass(set):
 PREVIEW_CASES = [
     0, -17, 3.25, float('inf'), True, None, 10**50,
     '', 'short', 'x' * 500, "it's", 'say "hi"', 'both \' and "' + 'z' * 80,
-    "only ' quote here " + 'y' * 80, 'tab\tnew\nline\back' * 20, 'ünïcødé ✓ ' * 20,
+    "only ' quote here " + 'y' * 80, 'tab\tnew\nline\\back\bspace' * 20, 'ünïcødé ✓ ' * 20,
     [], [[]], [1, 'two', 3.0, None], [[i, str(i)] for i in range(100)],
     (), (1,), ((1,),), (1, 2, 3) * 30,
     set(), {1}, set(range(200)), frozenset(), frozenset({'a'}),
