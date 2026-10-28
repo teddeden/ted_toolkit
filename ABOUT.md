@@ -124,6 +124,23 @@ A separate top-level package, `toolkit_gui/`, contains an optional desktop GUI s
 of this — see "The desktop GUI shell" section below. It never modifies how `tedtoolkit`/
 `ted_toolkit.py` behave when run the plain command-line way.
 
+## Startup arguments / drag-and-drop (`_launch_from_args()`)
+
+`ted_toolkit.py`'s `__main__` block hands `sys.argv[1:]` (files dragged onto
+`start_ted_toolkit.bat` arrive this way through `%*`) to `_launch_from_args()`.
+`_classify_launch_arg()` decides what to do from the first argument:
+
+| First argument | Action |
+|---|---|
+| `.py` | `_run_script()` replay (the original behavior; `continue_execution()` unchanged) |
+| `.tedsession` | window title = file name, then `restore_session(file_path=...)` |
+| any other existing file, or a folder | no title prompt; window title = file name(s); `data = data_import(file_path=...)` (`data_1`, `data_2`, ... for several), each run through `_exec_launch_command()` |
+| missing path | message, then the normal interactive start (title prompt) |
+
+`_exec_launch_command()` is the same add-to-history-then-`exec()` sequence `_run_script()` uses,
+so any prompts the import raises (sheet, csv/txt, csv options) get baked into that history
+line. Arguments of a different kind from the first one are ignored with a warning.
+
 ## Why `help_all()`/`help_vars()`/`_run_script()` live in `ted_toolkit.py`, not the package
 
 These functions call bare `globals()`/`eval(name)` against **whatever module is running as
@@ -138,7 +155,18 @@ up" by moving them into the package.
 `data_import()`/`data_export()` in `tedtoolkit/io/dispatch.py` are the blessed entry points —
 they auto-detect xlsx/csv/txt/xml/xml_archive (import) or xlsx/csv/txt (export) from the file
 extension (prompting if ambiguous), support Excel sheet selection, and are fully scriptable via
-kwargs with GUI-prompt fallback when kwargs are missing. `xlsx_import`/`xlsx_export`/
+kwargs with GUI-prompt fallback when kwargs are missing.
+
+`data_import()` also sniffs the *content* of `.txt` and unknown-extension files with
+`_sniff_delimited()`. This uses `csv.Sniffer` over `, ; \t |`, and accepts the result only if
+the first ~20 lines split into a consistent number of fields, at least 2. If the file looks
+delimited, `data_import()` offers csv vs plain text with csv pre-selected. It then passes the
+detected delimiter to `csv_import()` as the default for its delim prompt, via the internal
+`_delim_default` kwarg. The answer is baked into history as `process_as=`. Sniffing is skipped
+while `_run_script()` is replaying: it sets `tedtoolkit.history.REPLAY_ACTIVE`, so a script
+line saved *before* this feature (`data_import(file_path='x.txt')`, no `process_as`) still
+reads the file as plain text with no new prompt. `.csv`/`.xlsx`/`.xml`/archives and explicit
+`process_as=` kwargs are never sniffed. `xlsx_import`/`xlsx_export`/
 `csv_import`/`csv_export`/`xml_import`/`xml_archive_import` remain public (not just internal
 helpers) since existing saved scripts may call them directly for their non-prompting return
 shapes. **Zip/password-protected CSV import was deliberately dropped** during the 2026 refactor
@@ -299,7 +327,8 @@ widget drawn on top of it, not a reimplementation of one.
 Since each tab is a separate OS process, the GUI can't just call Python functions inside a
 session to inspect its variables — it needs an IPC channel into that specific process. This is
 what `tedtoolkit/gui_bridge.py` is for: a background thread, started by `maybe_start_bridge()`,
-which is called from `ted_toolkit.py` right after `ARGS = sys.argv[1:]` and does **nothing at all**
+which is called from `ted_toolkit.py` right after `ARGS = sys.argv[1:]` (imported there under the
+private alias `_maybe_start_bridge`, so it stays out of `help_all()`) and does **nothing at all**
 unless the GUI has set `TEDTOOLKIT_GUI_BRIDGE_PORT` before spawning the process —
 `start_ted_toolkit.bat` never sets this, so plain command-line usage is unaffected. When active,
 it opens a localhost TCP socket and answers newline-delimited JSON requests

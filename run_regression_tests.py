@@ -65,6 +65,10 @@ KNOWN_UNTESTABLE = [
      'Depends on real psutil.Process CPU sampling against live spawned processes over multiple '
      'poll ticks; verified manually by running a CPU-heavy command and watching the tab dot and '
      'status bar respond.'),
+    ('Real Explorer drag-and-drop onto start_ted_toolkit.bat',
+     '_launch_from_args() dispatch (.py / .tedsession / data files) is unit tested, but the '
+     'Explorer drop gesture and the resulting console session are not. Verify by hand: drop an '
+     '.xlsx, a delimited .txt, two .csv files, a .tedsession and a .py onto the launcher.'),
     ('setup_toolkit.bat / setup_toolkit.ps1 (environment creation, local_env.cmd)',
      'Creates real conda/venv environments and downloads packages. Verify by hand: run '
      'setup_toolkit.bat on a clean machine (both flows), then confirm start_ted_toolkit.bat '

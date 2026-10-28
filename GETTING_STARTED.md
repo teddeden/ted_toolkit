@@ -95,7 +95,9 @@ For fn reference type help_all().
 Title for this session: >>>
 ```
 
-Type a title (or just press Enter), then try `help_all()`. To check that history capture works,
+Type a title (or just press Enter), then try `help_all()`. You can also drag a data file
+(`.xlsx`, `.csv`, `.txt`, ...), a saved `.py` script or a `.tedsession` onto
+`start_ted_toolkit.bat` to import, replay or restore it straight away (see README.md). To check that history capture works,
 type any command, press Enter, and then press **Up**: the command should be recalled. See
 [README.md](README.md) for what the toolkit does and how guided functions work.
 

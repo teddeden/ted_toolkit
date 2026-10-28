@@ -73,6 +73,15 @@ To replay a previously saved script with no prompts:
 start_ted_toolkit.bat path\to\saved_script.py
 ```
 
+You can also **drag a file onto `start_ted_toolkit.bat`** (or pass it as the argument). What
+happens depends on the file type:
+
+| Dropped file | What happens |
+|---|---|
+| `.py` (from `save_history()`) | replayed, as above |
+| `.tedsession` (from `save_session()`) | restored: variables and history come back, nothing re-runs |
+| anything else (`.xlsx`, `.csv`, `.txt`, `.xml`, `.tar.gz`, a folder, ...) | the title prompt is skipped and `data = data_import(file_path=...)` runs straight away (`data_1`, `data_2`, ... for several files) |
+
 ## Getting contextual help
 
 - `help_all()` — prints every public function, grouped by category, with a one-line description
