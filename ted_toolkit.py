@@ -473,6 +473,76 @@ def continue_execution():
     _run_script(sys.argv[1:], continued=True)
 continue_execution.desc = 'Restart script execution post-error'
 
+def _classify_launch_arg(path):
+    '''What to do with a path passed on the command line (e.g. a file dragged onto
+    start_ted_toolkit.bat): 'script' (.py - replay it), 'session' (.tedsession - restore it),
+    'data' (any other existing file, or a folder - data_import() it), or 'invalid'.'''
+    if not os.path.exists(path):
+        return 'invalid'
+    lowered = path.lower()
+    if os.path.isfile(path) and lowered.endswith('.py'):
+        return 'script'
+    if os.path.isfile(path) and lowered.endswith('.tedsession'):
+        return 'session'
+    return 'data'
+
+def _exec_launch_command(line):
+    '''Echo, record in history, and execute one command on the user's behalf - the same
+    add-then-exec sequence _run_script() uses, so a guided function's prompts get baked
+    into this history line exactly as if the user had typed it.'''
+    print('>>> ' + line)
+    readline.add_history(line)
+    try:
+        exec(line, globals())
+    except KeyboardInterrupt:
+        print('Command canceled by the user.')
+    except Exception:
+        beep()
+        print('*************TRACEBACK**************')
+        traceback.print_exception(*sys.exc_info())
+        print('***********END TRACEBACK************')
+
+def _launch_from_args(args):
+    '''Startup dispatch on the command-line arguments (files dragged onto the launcher):
+    - a .py script is replayed via _run_script() (unchanged behavior)
+    - a .tedsession file is restored via restore_session()
+    - any other file(s)/folder(s) are imported: data = data_import(file_path=...) for one,
+      data_1, data_2, ... for several
+    Only the first argument's kind counts; arguments of a different kind are ignored with a
+    warning. Returns True if it handled startup, False if the normal interactive start
+    (title prompt) should run instead (no arguments, or the first one doesn't exist).'''
+    if not args:
+        return False
+    kind = _classify_launch_arg(args[0])
+    if kind == 'invalid':
+        print(f'Startup file not found: {args[0]}')
+        print('TED TOOLKIT Python tools reverting to interactive mode\n')
+        return False
+    if kind == 'data':
+        paths = [path for path in args if _classify_launch_arg(path) == 'data']
+    else:
+        paths = [args[0]]
+    for path in args:
+        if path not in paths:
+            print(f'WARNING: ignoring additional startup argument (not processed together with '
+                  f'{os.path.basename(args[0])}): {path}')
+    if kind == 'script':
+        _run_script(paths, view_comments=True)
+        return True
+    _ = os.system('cls')
+    set_window_title(', '.join(os.path.basename(path.rstrip('\\/')) for path in paths),
+                     include_timestamp='LOCAL')
+    if kind == 'session':
+        print('TED TOOLKIT Python tools: restoring session\n')
+        restore_session(file_path=paths[0])
+    else:
+        print(f'TED TOOLKIT Python tools: importing {len(paths)} file(s)\n')
+        for index, path in enumerate(paths, start=1):
+            var_name = 'data' if len(paths) == 1 else f'data_{index}'
+            _exec_launch_command(f'{var_name} = data_import(file_path={_quoted(path)})')
+    print('\nFor fn reference type help_all().\n')
+    return True
+
 # Defined unconditionally (not just inside `if __name__ == '__main__':`) so continue_execution()
 # can safely reference ARGS even if ted_toolkit.py is ever imported as a regular module instead
 # of run as the entry script.
@@ -492,16 +562,9 @@ _maybe_start_bridge(globals())
 _SESSION_BASELINE = dict(globals())
 
 if __name__ == '__main__':
-    # for usage as a main module
-    if ARGS:
-        if ARGS[0][-3:] == '.py' and os.path.exists(ARGS[0]):
-            pass
-        else:
-            print('Failed attempt to execute history: must be .py file!')
-            print('History file attempted: '+ARGS[0])
-            print('TED TOOLKIT Python tools reverting to interactive mode\n')
-            print('For function reference type "help_all()"\n')
-    else:
+    # for usage as a main module; files passed on the command line (e.g. dragged onto
+    # start_ted_toolkit.bat) are dispatched by type - see _launch_from_args()
+    if not _launch_from_args(ARGS):
         _ = os.system('cls')
         print('TED TOOLKIT Python tools interactive mode.\n\nFor fn reference type help_all().\n')
         title = input(prompt='Title for this session: >>> ')
@@ -514,5 +577,3 @@ if __name__ == '__main__':
             set_window_title('Ted Toolkit Interactive Mode', include_timestamp='LOCAL')
         print('Use set_window_title(title) to rename the window.\n')
         del title
-    if ARGS:
-        _run_script(ARGS, view_comments=True)
