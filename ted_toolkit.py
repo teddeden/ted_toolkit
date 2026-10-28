@@ -9,9 +9,11 @@ actual implementation lives in the tedtoolkit/ package (an installable, independ
 package). This file does three things: (1) imports everything from tedtoolkit so the interactive
 session gets the same flat, bare-callable namespace the original single-file toolkit provided,
 (2) defines FUNCTION_CATEGORIES plus help_all()/save_function_reference()/help_vars()/
-_run_script()/continue_execution(), and (3) the __main__ entry point.
+save_session()/restore_session()/_run_script()/continue_execution(), and (3) the __main__
+entry point.
 
-help_all(), save_function_reference(), help_vars(), and _run_script() are kept here rather than
+help_all(), save_function_reference(), help_vars(), save_session()/restore_session() (thin
+wrappers over tedtoolkit/session.py's pure cores), and _run_script() are kept here rather than
 in the tedtoolkit package ON PURPOSE: they inspect globals()/eval() names against the *interactive
 session's own namespace*, which is only correct when they live in whatever module is actually
 running as __main__. Moving them into a tedtoolkit submodule would make them introspect that
@@ -28,7 +30,7 @@ import sys
 import traceback
 
 from tedtoolkit.history import (input, _quoted, _get_last_command, _get_previous_command,
-                                 _add_kwarg_to_last_command,
+                                 _add_kwarg_to_last_command, _remove_last_history_item,
                                  _remove_keyword_argument_from_last_command, _check_assignment)
 from tedtoolkit.validation import _is_list_of_lists, _check_var_table
 from tedtoolkit.prompts import (ask_yn, ask_num, ask_select, ask_select_column_index,
@@ -59,6 +61,8 @@ from tedtoolkit.io.qr import qr_encode, qr_decode
 from tedtoolkit.io.dispatch import data_import, data_export
 from tedtoolkit.gui.messagebox import (g_ask_yn, g_ask_okcancel, g_conditional_stop,
                                         g_show_info, g_show_warning, g_show_error)
+from tedtoolkit.session import (_save_session_core, _load_session_core, _find_restore_conflicts,
+                                _restore_session_core, SESSION_FILETYPES)
 
 VERSION = "0.77"
 
@@ -117,6 +121,8 @@ FUNCTION_CATEGORIES = {
     'pre_process_specs_detail': 'Data Analysis & Manipulation',
     'get_current_user': 'Utilities & Settings',
     'save_history': 'Utilities & Settings',
+    'save_session': 'Utilities & Settings',
+    'restore_session': 'Utilities & Settings',
     'beep': 'Utilities & Settings',
     'read_txt': 'Input / Output',
     'dynamic_import': 'Utilities & Settings',
@@ -269,6 +275,129 @@ def help_vars(exclude_globals=True):
     print('\n')
 help_vars.desc = 'Show all current variables of common types'
 
+def _drop_own_history_line(fn_name):
+    '''Remove the call to fn_name (the most recent history line) from readline history, so
+    save_session()/restore_session() never appear in saved or restored history.'''
+    if readline.get_current_history_length() and fn_name + '(' in (_get_last_command() or ''):
+        _remove_last_history_item()
+
+def save_session(**kwargs):
+    '''Saves the whole working session - command history AND the current variables - to
+    a single compressed .tedsession file (zip), to be picked up later with restore_session()
+    exactly where you left off, with no re-importing or recomputation.
+    kwargs:
+    - file_path (prompts with a Save As dialog if not given)
+    What is saved:
+    - every command in the session history (as save_history() would write it), except the
+      save_session() call itself
+    - every variable holding data (tables, dicts, trees, strings, numbers, ...), pickled
+      one by one; anything that cannot be pickled is skipped and listed
+    NOT saved: screen output, functions defined at the prompt, and modules loaded with
+    dynamic_import() (re-run the dynamic_import() line after restoring).
+    The file uses the same .tedsession format as the desktop GUI's Save Session menu, so
+    either one can restore the other's files.
+    USAGE:
+    >>> save_session()
+    >>> save_session(file_path='c:/temp/recon_day1.tedsession')
+    '''
+    _drop_own_history_line('save_session')
+    if SCRIPT_RUNNING:
+        print('save_session(): cannot save while a recorded script is running. Nothing saved.')
+        return
+    file_path = kwargs.get('file_path', '')
+    if not file_path:
+        file_path = g_sel_file_to_write(title='TED TOOLKIT: Save session as',
+                                        filetypes=SESSION_FILETYPES,
+                                        force_file_extension='tedsession')
+    if not file_path:
+        print('save_session(): no file selected. Nothing saved.')
+        return
+    history = [readline.get_history_item(index)
+               for index in range(1, readline.get_current_history_length() + 1)]
+    succeeded, failed = _save_session_core(globals(), history, file_path,
+                                           toolkit_version=VERSION, saved_by=get_current_user(),
+                                           saved_at_utc=get_utc_timestamp(),
+                                           baseline=_SESSION_BASELINE)
+    print(f'\nSession saved to: \n{file_path}\n')
+    print(f'  {len(history)} history line(s), {len(succeeded)} variable(s): {", ".join(succeeded)}')
+    if failed:
+        print(f'  WARNING: {len(failed)} variable(s) could not be pickled and were NOT saved:')
+        for item in failed:
+            print(f'    {item["name"]:<23} {item["type"][:18]:<18} {item["reason"][:60]}')
+    print('')
+save_session.desc = 'Save history + variables to file'
+
+def restore_session(**kwargs):
+    '''Restores a session saved with save_session() (or the GUI's Save Session): the saved
+    variables are put back into this session and the saved command history is APPENDED to
+    this session's history (after a "# --- restored session ..." marker line), so up-arrow
+    recall and save_history() continue seamlessly. Nothing in the history is re-executed.
+    kwargs:
+    - file_path (prompts with a file dialog if not given)
+    - on_conflict: 'abort' or 'overwrite' - what to do if variables in the file already
+      exist in this session (prompts, after listing the conflicts, if not given)
+    WARNING: restoring unpickles the file, which can execute arbitrary code - only
+    restore .tedsession files you created yourself or otherwise trust.
+    USAGE:
+    >>> restore_session()
+    >>> restore_session(file_path='c:/temp/recon_day1.tedsession', on_conflict='overwrite')
+    '''
+    _drop_own_history_line('restore_session')
+    if SCRIPT_RUNNING:
+        print('restore_session(): cannot restore while a recorded script is running. Nothing restored.')
+        return
+    file_path = kwargs.get('file_path', '')
+    if not file_path:
+        file_path = g_sel_file(title='TED TOOLKIT: Select session file to restore',
+                               filetypes=SESSION_FILETYPES)
+    if not file_path:
+        print('restore_session(): no file selected. Nothing restored.')
+        return
+    try:
+        loaded = _load_session_core(file_path)
+    except Exception as exc:
+        print(f'restore_session(): could not read {file_path}:\n  {exc}\nNothing restored.')
+        return
+    for error in loaded['errors']:
+        print(f'WARNING: {error}')
+    variables = loaded['variables']
+    if variables is None:
+        if not ask_yn(prompt='The saved variables could not be read. Restore the command history only?'):
+            print('Restore aborted. Session unchanged.')
+            return
+        variables = {}
+    conflicts = _find_restore_conflicts(globals(), variables, _SESSION_BASELINE)
+    if conflicts:
+        print(f'\nWARNING: {len(conflicts)} variable(s) in the session file already exist in this session:\n')
+        print(f'  {"Variable name":<23}   {"Current type":<18} {"Type in file":<18}')
+        for name, current_type, saved_type in conflicts:
+            spacer = "   " if len(name) < 24 else "..."
+            print(f'  {name[:23]:<23}{spacer}{current_type[:18]:<18} {saved_type[:18]:<18}')
+        print('')
+        on_conflict = kwargs.get('on_conflict', '')
+        if on_conflict not in ('abort', 'overwrite'):
+            choice = ask_select(['Abort - do not restore the session (nothing is changed)',
+                                 'Restore - OVERWRITE the variables listed above'],
+                                prompt='How do you want to proceed?')
+            on_conflict = 'overwrite' if choice == 1 else 'abort'
+        if on_conflict == 'abort':
+            print('Restore aborted. Session unchanged.')
+            return
+    manifest = loaded['manifest']
+    marker = (f'# --- restored session from {file_path} '
+              f'(saved by {manifest.get("saved_by", "?")} at UTC:{manifest.get("saved_at_utc", "?")}, '
+              f'toolkit v{manifest.get("toolkit_version", "?")}) ---')
+    _restore_session_core(globals(), variables, loaded['history_lines'], marker)
+    print(f'\nSession restored from: \n{file_path}\n')
+    print(f'  {len(loaded["history_lines"])} history line(s) appended, '
+          f'{len(variables)} variable(s) restored: {", ".join(sorted(variables))}')
+    not_saved = manifest.get('variables', {}).get('failed', [])
+    if not_saved:
+        print(f'  NOTE: {len(not_saved)} variable(s) could not be saved originally and are missing: '
+              f'{", ".join(item["name"] for item in not_saved)}')
+    print('')
+restore_session.desc = 'Restore saved history + variables'
+
 LAST_LINE_ATTEMPTED = -1
 SCRIPT_RUNNING = False
 
@@ -354,6 +483,12 @@ ARGS = sys.argv[1:]
 # never sets this, so plain command-line usage is completely unaffected.
 from tedtoolkit.gui_bridge import maybe_start_bridge
 maybe_start_bridge(globals())
+
+# Snapshot of everything the toolkit itself put into the session namespace, taken after
+# all definitions above: save_session()/restore_session() (and the GUI bridge) use it to
+# tell toolkit-provided names (e.g. ALL_SHEETS_TEXT) apart from the user's working
+# variables. Holds references, not ids, so a rebound name is detected reliably.
+_SESSION_BASELINE = dict(globals())
 
 if __name__ == '__main__':
     # for usage as a main module

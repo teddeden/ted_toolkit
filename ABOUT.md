@@ -76,7 +76,11 @@ toolkit/
 │   ├── util.py                elapsed(), timer_start()/timer_elapsed() benchmarking, timestamps, get_current_user, beep, set_window_title
 │   ├── clipboard.py           Windows clipboard I/O (win_copy/win_paste/*_table) + win_copy_pickle/win_paste_pickle
 │   │                           (any object <-> compressed pickled ASCII text, via clipboard or .txt file)
-│   ├── introspect.py          dynamic_import() and the function-reference helpers help_all()/save_function_reference() build on
+│   ├── introspect.py          dynamic_import() and the function-reference helpers help_all()/save_function_reference() build on;
+│   │                           _preview_repr() (bounded repr preview used by help_vars() and the GUI Variables panel)
+│   ├── session.py             pure cores behind save_session()/restore_session() (CLI) and the GUI bridge's
+│   │                           rpc_save_session()/rpc_restore_session() - variable classification, pickling,
+│   │                           conflict detection; reads/writes toolkit_gui/session_bundle.py's .tedsession format
 │   ├── gui/
 │   │   ├── dialogs.py          tkinter file/folder picker dialogs (g_sel_file, g_sel_file_to_write, g_sel_folder, g_sel_files)
 │   │   ├── messagebox.py       tkinter messagebox wrappers (g_ask_yn, g_ask_okcancel, g_conditional_stop, g_show_*)
@@ -303,29 +307,51 @@ the codebase:
 - `tedtoolkit/introspect.py::_variable_snapshot_core()` — the same type-filter logic
   `help_vars()` already has inline, but taking an explicit namespace dict instead of `eval()`-ing
   against `globals()`, so it's safe to call from a different module. Used for the live Variables
-  panel.
+  panel. Its 40-character previews (like `help_vars()`'s) come from `_preview_repr()`, which
+  renders only the visible prefix of a value instead of `repr()`-ing the whole object and
+  slicing — important because this panel is polled every second, and a full `repr()` of a large
+  table or tree takes seconds. The output is identical to `repr(value)[:40]` for built-in types.
 - `tedtoolkit/tables/snapshot.py::_table_snapshot_core()` — a new, bounded (default 250×250)
   structured table slice, used for the Data Preview panel's truncated grid.
 
 `help_vars()`/`help_all()` themselves are untouched — the extraction happened *underneath* them,
 not by rewiring them.
 
-### Save/Restore Session
+### Save/Restore Session (GUI menu and CLI `save_session()`/`restore_session()`)
 
-Menu-only, and deliberately **not** part of the plain CLI surface: `rpc_save_session()`/
-`rpc_restore_session()` live only in `gui_bridge.py` and are never imported into `ted_toolkit.py`,
-so they're structurally invisible to `help_all()`'s listing (short of a user deliberately
-importing the bridge module themselves at the prompt — an inherent, unavoidable property of a
-real Python REPL, consistent with this codebase's existing eval/exec stance).
+There are two entry points over **one shared core and one file format**:
+- **CLI**: `save_session()`/`restore_session()` are thin wrappers in `ted_toolkit.py`. They live
+  there because they need the session's own `globals()`, for the same reason `help_vars()` does.
+  Both drop their own call line from readline history, so they never appear in saved or restored
+  history. Restore lists any variables that the file would overwrite and asks whether to abort
+  or overwrite (or follows `on_conflict='abort'|'overwrite'`). It then *appends* a
+  `# --- restored session from ... ---` marker plus the saved history to the current history,
+  and injects the variables. Prior history is kept, and nothing is executed.
+- **GUI menu**: `rpc_save_session()`/`rpc_restore_session()` in `gui_bridge.py` are bridge RPC
+  handlers and are never imported into `ted_toolkit.py` (restore spawns a fresh tab, described
+  below).
+
+The pure logic lives in `tedtoolkit/session.py`: `_classify_session_variables()`,
+`_pickle_variables()`, `_save_session_core()`, `_load_session_core()`,
+`_find_restore_conflicts()` and `_restore_session_core()`. Variable filtering is per variable and
+denylist-based, not `help_vars()`'s blanket ALL-CAPS display filter, so a user's own ALL-CAPS
+variable is never silently dropped. It also uses `_SESSION_BASELINE`, a `dict(globals())`
+snapshot taken at the end of `ted_toolkit.py`'s load. A name still bound to the *same object* it
+had at load time is toolkit-provided (`ALL_SHEETS_TEXT`, `SESSION_FILETYPES`, ...) and is neither
+saved nor reported as a restore conflict; a name the user rebound is user data.
 
 A saved `.tedsession` file is a zip (not one `pickle.dumps()` of everything, so a corrupt member
 can never poison the rest): `manifest.json`, `transcript.txt` (GUI-side, from the tab's `pyte`
-scrollback), `history.json`/`history.py` (the bridge's readline history, canonical + human-
-readable), and `variables.pkl` (the bridge's pickled working variables — a per-variable
-denylist-based filter, not `help_vars()`'s ALL-CAPS-blanket-exclusion display filter, so a user's
-own ALL-CAPS variable is never silently dropped from a save).
+scrollback; empty for CLI saves), `history.json`/`history.py` (the session's readline history,
+canonical + human-readable), and `variables.pkl` (the pickled working variables). The
+reader/writer is `toolkit_gui/session_bundle.py` (pure json+zipfile). `tedtoolkit/session.py`
+imports it lazily, only when a bundle is actually read or written. The dependency deliberately
+points this way: the GUI process never imports the `tedtoolkit` package (see
+`toolkit_gui/config.py`), and the CLI never needs PySide6. Either side can restore the other's
+files. Not saved: screen output (CLI), functions defined at the prompt, and `dynamic_import()`
+modules, which are reported as unpicklable; re-run the `dynamic_import()` line after a restore.
 
-Restore **never replays or `exec()`s a single history line** — it spawns a brand-new blank tab,
+GUI restore **never replays or `exec()`s a single history line** — it spawns a brand-new blank tab,
 waits for that fresh session's own unconditional startup `os.system('cls')` + title prompt to
 fully settle (auto-answering it with a blank Enter, exactly like a user pressing Enter there),
 *then* seeds the old transcript into the tab's terminal display and sends the saved
