@@ -481,8 +481,9 @@ ARGS = sys.argv[1:]
 # Opt-in only: no-ops instantly unless the desktop GUI shell (toolkit_gui/) set
 # TEDTOOLKIT_GUI_BRIDGE_PORT before spawning this process. start_ted_toolkit.bat
 # never sets this, so plain command-line usage is completely unaffected.
-from tedtoolkit.gui_bridge import maybe_start_bridge
-maybe_start_bridge(globals())
+# Imported under a private alias so it stays out of help_all()/save_function_reference().
+from tedtoolkit.gui_bridge import maybe_start_bridge as _maybe_start_bridge
+_maybe_start_bridge(globals())
 
 # Snapshot of everything the toolkit itself put into the session namespace, taken after
 # all definitions above: save_session()/restore_session() (and the GUI bridge) use it to
