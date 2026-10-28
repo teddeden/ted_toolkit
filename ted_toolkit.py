@@ -36,7 +36,7 @@ from tedtoolkit.prompts import (ask_yn, ask_num, ask_select, ask_select_column_i
                                  _kwarg_parse_prompt_str, _kwarg_parse_prompt_bool,
                                  _kwarg_parse_prompt_num, _kwarg_parse_prompt_list)
 from tedtoolkit.util import (elapsed, get_utc_timestamp, get_local_timestamp, get_current_user,
-                              _find_notepad_pp, beep, set_window_title)
+                              _find_notepad_pp, beep, set_window_title, timer_start, timer_elapsed)
 from tedtoolkit.clipboard import win_copy, win_paste, win_paste_table, win_copy_table
 from tedtoolkit.introspect import (dynamic_import, _get_function_declaration, _get_module_functions,
                                     DYNAMIC_IMPORTS)
@@ -88,6 +88,8 @@ FUNCTION_CATEGORIES = {
     'ask_select_sheet': 'User Input (text)',
     'input': 'User Input (text)',
     'elapsed': 'Utilities & Settings',
+    'timer_start': 'Utilities & Settings',
+    'timer_elapsed': 'Utilities & Settings',
     'win_copy': 'Input / Output',
     'win_paste': 'Input / Output',
     'win_paste_table': 'Input / Output',

@@ -1,6 +1,10 @@
-'''tedtoolkit.util - small stand-alone utilities (timestamps, elapsed time,
-current user, window title, notepad++ discovery, beep). No intra-package
-dependencies except tedtoolkit's own START_TIME, which the root launcher sets.
+'''tedtoolkit.util - small stand-alone utilities (timestamps, session elapsed time,
+benchmarking timer, current user, window title, notepad++ discovery, beep). No
+intra-package dependencies.
+
+START_TIME is set once, when this module is first imported (i.e. at session start),
+and backs elapsed(). TIMER_START backs timer_start()/timer_elapsed(): it is reset by
+every timer_start() call, and equals START_TIME until the first one.
 '''
 
 import datetime
@@ -8,16 +12,53 @@ import os
 import time
 
 START_TIME = datetime.datetime.now()
+TIMER_START = START_TIME
+
+
+def _format_timedelta(delta):
+    '''Return a timedelta as "h:mm:ss" (or "N day(s), h:mm:ss"), microseconds dropped.
+    str(timedelta) omits the ".ffffff" part entirely when microseconds == 0, so the
+    fraction is removed from the timedelta itself rather than by searching for "."'''
+    return str(delta - datetime.timedelta(microseconds=delta.microseconds))
 
 
 def elapsed():
-    '''Returns the time (in string format hh:mm:ss) since the START_TIME of the session'''
-    current = datetime.datetime.now()
-    delta = current - START_TIME
-    temp = str(delta)
-    decimal_position = temp.find('.')
-    return temp[:decimal_position]
+    '''Returns the time (in string format h:mm:ss) since the START_TIME of the session'''
+    return _format_timedelta(datetime.datetime.now() - START_TIME)
 elapsed.desc = 'Returns time (str) since start'
+
+
+def timer_start():
+    '''Starts (or restarts) a benchmarking timer; read it back with timer_elapsed().
+    Independent of elapsed(), which always measures from session start.
+    USAGE:
+    >>> timer_start()
+    Timer start at 2026-10-28 14:03:11.204518
+    >>> x = data_join(a, b)
+    >>> timer_elapsed()
+    3.481207
+    >>> timer_elapsed(output_format='string')
+    '0:00:03'
+    '''
+    global TIMER_START
+    TIMER_START = datetime.datetime.now()
+    print(f'Timer start at {TIMER_START}')
+timer_start.desc = 'Start benchmarking timer'
+
+
+def timer_elapsed(output_format='number'):
+    '''Returns the time since the last timer_start() call (or since session start if
+    timer_start() has not been called yet).
+    output_format='number' (default): seconds as a float, e.g. 3.481207
+    output_format='string': "h:mm:ss" string, e.g. "0:00:03" (same format as elapsed())'''
+    delta = datetime.datetime.now() - TIMER_START
+    if output_format == 'number':
+        return delta.total_seconds()
+    if output_format == 'string':
+        return _format_timedelta(delta)
+    raise ValueError("timer_elapsed(): output_format must be 'number' or 'string', "
+                     f'got {output_format!r}')
+timer_elapsed.desc = 'Time since timer_start() (s or str)'
 
 
 def get_utc_timestamp():

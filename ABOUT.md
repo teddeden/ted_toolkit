@@ -73,7 +73,7 @@ toolkit/
 │   ├── history.py             readline history-rewrite primitives (input(), _add_kwarg_to_last_command, _check_assignment, ...)
 │   ├── validation.py          table-shape checks (_is_list_of_lists, _check_var_table)
 │   ├── prompts.py             console prompt primitives (ask_yn, ask_num, ask_select, ...) and the _kwarg_parse_prompt_* wrappers
-│   ├── util.py                elapsed(), timestamps, get_current_user, beep, set_window_title
+│   ├── util.py                elapsed(), timer_start()/timer_elapsed() benchmarking, timestamps, get_current_user, beep, set_window_title
 │   ├── clipboard.py           Windows clipboard I/O (win_copy/win_paste/*_table)
 │   ├── introspect.py          dynamic_import() and the function-reference helpers help_all()/save_function_reference() build on
 │   ├── gui/
