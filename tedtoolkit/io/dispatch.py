@@ -16,11 +16,13 @@ that function no longer exists; this is a deliberate, called-out behavior
 change, not an oversight.
 '''
 
+import csv
 import os
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 
+from tedtoolkit import history
 from tedtoolkit.history import _add_kwarg_to_last_command, _quoted
-from tedtoolkit.prompts import ask_select, _kwarg_parse_prompt_bool
+from tedtoolkit.prompts import ask_select, _kwarg_parse_prompt_bool, _prompt_for_list_arg
 from tedtoolkit.validation import _is_list_of_lists
 from tedtoolkit.gui.dialogs import g_sel_file, g_sel_file_to_write
 from tedtoolkit.io.xlsx import xlsx_import, xlsx_export, ask_select_sheet, ALL_SHEETS_TEXT
@@ -53,6 +55,10 @@ _XML_FLATTEN_KWARGS = ('record_path', 'max_depth', 'residual_format', 'list_stra
 _IMPORT_FORMATS = ('xlsx', 'csv', 'txt', 'xml', 'xml_archive')
 _EXPORT_FORMATS = ('xlsx', 'csv', 'txt')
 
+# Formats whose extension already says exactly how to read the file - never content-sniffed.
+_SELF_DESCRIBING_FORMATS = ('csv', 'xlsx', 'xml', 'xml_archive')
+_SNIFF_DELIMITERS = ',;\t|'
+
 
 def _file_ext(path):
     '''return the lowercased extension of path, without the leading dot (e.g. 'xlsx', 'csv', 'txt')'''
@@ -72,9 +78,40 @@ def _detect_format(path):
     return _file_ext(path)
 
 
-def _resolve_process_as(file_path, kwargs, fn_name, valid_formats):
+def _sniff_delimited(file_path, sample_bytes=65536):
+    '''Pure check: does file_path look like delimited (csv-style) data, whatever its extension?
+    Reads at most sample_bytes, lets csv.Sniffer pick a delimiter among , ; tab |, then only
+    trusts it if the first ~20 non-blank lines mostly (>= 90%) split into the same number
+    (>= 2) of fields. Returns (delimiter, column_count), or None for anything else (plain
+    text, a single column, ragged text, binary content, unreadable file).'''
+    try:
+        with open(file_path, 'rb') as fil:
+            raw = fil.read(sample_bytes)
+    except OSError:
+        return None
+    if not raw or b'\x00' in raw:
+        return None
+    lines = [line for line in raw.decode('utf-8-sig', errors='replace').splitlines() if line.strip()]
+    if len(raw) == sample_bytes:
+        lines = lines[:-1]  # the sample probably cut the last line short
+    lines = lines[:20]
+    if len(lines) < 2:
+        return None
+    try:
+        dialect = csv.Sniffer().sniff('\n'.join(lines), delimiters=_SNIFF_DELIMITERS)
+    except csv.Error:
+        return None
+    field_counts = [len(row) for row in csv.reader(lines, dialect)]
+    column_count, frequency = Counter(field_counts).most_common(1)[0]
+    if column_count < 2 or frequency < 0.9 * len(field_counts):
+        return None
+    return dialect.delimiter, column_count
+
+
+def _resolve_process_as(file_path, kwargs, fn_name, valid_formats, default=None):
     '''resolve which format to use for file_path (from valid_formats), prompting if ambiguous
-    and baking the resolved choice into history if it wasn't already an explicit kwarg'''
+    and baking the resolved choice into history if it wasn't already an explicit kwarg;
+    default (optional, one of valid_formats) is pre-selected in the ambiguous-type prompt'''
     process_as = kwargs.get('process_as', _detect_format(file_path))
     if process_as not in valid_formats:
         choices = OrderedDict([('xlsx', 'Excel 2003/2010 file'), ('csv', 'Comma separated values'),
@@ -83,7 +120,7 @@ def _resolve_process_as(file_path, kwargs, fn_name, valid_formats):
         process_as = ask_select({key: choices[key] for key in valid_formats},
                                 prompt='File type for "{}" is ambiguous; select the file type:'.format(
                                     file_path),
-                                orig_out=True)
+                                orig_out=True, default_val=default)
         if 'process_as' not in kwargs:
             _add_kwarg_to_last_command('process_as', _quoted(process_as), fn_name=fn_name)
     return process_as
@@ -98,7 +135,11 @@ def data_import(**kwargs):
         dict[member_name] -> table); every other format requires a single file
       process_as ('xlsx'|'csv'|'txt'|'xml'|'xml_archive') - only needed if file_path's extension
         is ambiguous (a .tar.gz/.tgz extension is never ambiguous - always resolves to
-        'xml_archive' automatically)
+        'xml_archive' automatically). A .txt (or unknown-extension) file whose content looks
+        delimited - see _sniff_delimited() - prompts csv vs plain text (csv pre-selected, with
+        the detected delimiter offered as csv's delim default); the answer is baked into
+        history as process_as=. Not sniffed while a saved script is replaying, so old script
+        lines keep reading such files as plain text, exactly as before.
       selected_sheet (xlsx only) - sheet name to return, or ALL_SHEETS_TEXT to get a dict of all sheets
       include_formulas, override_ro (xlsx only)
       delim, quote_mark, quoting, encoding, line_terminator, convert_numbers, convert_dates,
@@ -119,8 +160,8 @@ def data_import(**kwargs):
     if not file_path or not (os.path.isfile(file_path) or os.path.isdir(file_path)):
         file_path = g_sel_file(title=kwargs.get('gui_prompt', 'data_import(): select file'),
                                initialdir=LAST_PATH,
-                               filetypes=[('Data files', ('*.xlsx', '*.csv', '*.txt', '*.xml',
-                                                          '*.tar.gz', '*.tgz')),
+                               filetypes=[('Data files', ('*.xlsx', '*.csv', '*.txt', '*.tsv',
+                                                          '*.dat', '*.xml', '*.tar.gz', '*.tgz')),
                                           ('All files', ('*.*'))])
         if not file_path:
             print('No file selected: data import cancelled.\n')
@@ -128,7 +169,17 @@ def data_import(**kwargs):
         if 'file_path' not in kwargs:
             _add_kwarg_to_last_command('file_path', _quoted(file_path), fn_name='data_import')
     LAST_PATH = file_path if os.path.isdir(file_path) else os.path.split(file_path)[0]
-    process_as = _resolve_process_as(file_path, kwargs, 'data_import', _IMPORT_FORMATS)
+    sniffed = None
+    if ('process_as' not in kwargs and not history.REPLAY_ACTIVE and os.path.isfile(file_path)
+            and _detect_format(file_path) not in _SELF_DESCRIBING_FORMATS):
+        sniffed = _sniff_delimited(file_path)
+    process_as = _resolve_process_as(file_path, kwargs, 'data_import', _IMPORT_FORMATS,
+                                     default='csv' if sniffed else None)
+    if sniffed and _detect_format(file_path) == 'txt':
+        print(f'"{os.path.basename(file_path)}" looks like delimited data '
+              f'(delimiter {sniffed[0]!r}, {sniffed[1]} columns).')
+        process_as = _prompt_for_list_arg('process_as', ['csv', 'txt'], default_index=0,
+                                          fn_name='data_import')
 
     if process_as == 'xml_archive':
         return xml_archive_import(archive_path=file_path, _caller_fn_name='data_import',
@@ -151,8 +202,10 @@ def data_import(**kwargs):
         return sheets[selected_sheet]
 
     if process_as == 'csv':
-        return csv_import(file_path=file_path, _caller_fn_name='data_import',
-                          **{k: kwargs[k] for k in _CSV_IMPORT_KWARGS if k in kwargs})
+        csv_kwargs = {k: kwargs[k] for k in _CSV_IMPORT_KWARGS if k in kwargs}
+        if sniffed:
+            csv_kwargs['_delim_default'] = sniffed[0]
+        return csv_import(file_path=file_path, _caller_fn_name='data_import', **csv_kwargs)
 
     return read_txt(file_path=file_path, encoding=kwargs.get('encoding', 'utf-8'))
 data_import.desc = 'Unified import: xlsx/csv/txt/xml/xml_archive'

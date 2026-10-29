@@ -14,6 +14,10 @@ Bundle layout:
     history.py      - bridge-side: human-readable copy (matches
                        save_history()'s own header template)
     variables.pkl   - bridge-side: pickle.dumps() of one {name: value} dict
+
+Also the on-disk format of the CLI's save_session()/restore_session() (via
+tedtoolkit/session.py, which imports this module lazily); CLI saves write an empty
+transcript.txt. Keep this module dependency-free (json/zipfile only) - the CLI imports it.
 '''
 
 import json

@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 test_reports/
+
+# machine-specific environment activation written by setup_toolkit.bat
+local_env.cmd

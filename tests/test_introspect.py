@@ -5,7 +5,12 @@ by the GUI bridge's Variables panel.'''
 import datetime
 import types
 
-from tedtoolkit.introspect import _variable_snapshot_core
+import collections
+import time
+
+import pytest
+
+from tedtoolkit.introspect import _variable_snapshot_core, _preview_repr
 
 
 def test_includes_common_types():
@@ -48,3 +53,82 @@ def test_preview_is_truncated_to_40_chars():
     long_string = 'a' * 100
     result = _variable_snapshot_core({'x': long_string})
     assert len(result[0]['preview']) == 40
+
+
+# --- _preview_repr(): bounded preview, must equal repr(value)[:width] ---------------
+
+def _self_ref_list():
+    lst = [1, 2]
+    lst.append(lst)
+    return lst
+
+
+def _self_ref_dict():
+    dct = {'a': 1}
+    dct['me'] = dct
+    return dct
+
+
+class _PlainListSubclass(list):
+    pass
+
+
+class _PlainSetSubclass(set):
+    pass
+
+
+PREVIEW_CASES = [
+    0, -17, 3.25, float('inf'), True, None, 10**50,
+    '', 'short', 'x' * 500, "it's", 'say "hi"', 'both \' and "' + 'z' * 80,
+    "only ' quote here " + 'y' * 80, 'tab\tnew\nline\\back\bspace' * 20, 'ünïcødé ✓ ' * 20,
+    [], [[]], [1, 'two', 3.0, None], [[i, str(i)] for i in range(100)],
+    (), (1,), ((1,),), (1, 2, 3) * 30,
+    set(), {1}, set(range(200)), frozenset(), frozenset({'a'}),
+    {}, {'k': 'v'}, {i: {'nested': [i] * 5} for i in range(100)},
+    {(1, 2): {3, 4}, 'x': (5,)},
+    datetime.datetime(2026, 1, 2, 3, 4, 5), datetime.date(2026, 1, 2),
+    _self_ref_list(), _self_ref_dict(),
+    _PlainListSubclass([1, 2, 3]), _PlainSetSubclass({1}), _PlainSetSubclass(),
+    collections.OrderedDict([('a', 1), ('b', [2, 3])]),
+]
+
+
+@pytest.mark.parametrize('value', PREVIEW_CASES, ids=lambda v: type(v).__name__)
+@pytest.mark.parametrize('width', [1, 5, 40, 200])
+def test_preview_repr_matches_repr_prefix(value, width):
+    assert _preview_repr(value, width) == repr(value)[:width]
+
+
+def test_preview_repr_default_width_is_40():
+    value = list(range(1000))
+    assert _preview_repr(value) == repr(value)[:40]
+
+
+def test_preview_repr_zero_width():
+    assert _preview_repr([1, 2, 3], 0) == ''
+
+
+def test_preview_repr_custom_repr_subclass_is_approximated():
+    value = collections.defaultdict(list, {'a': [1]})
+    assert _preview_repr(value) == "defaultdict({'a': [1]})"
+
+
+def test_preview_repr_huge_int_does_not_raise():
+    assert 'preview unavailable' in _preview_repr(10**5000)
+
+
+def test_preview_repr_is_fast_on_large_objects():
+    # Regression: help_vars() called repr() on the whole object before slicing 40 chars
+    big_table = [[row, 'value', row * 1.5] for row in range(1_000_000)]
+    big_tree = {i: {'children': list(range(50))} for i in range(100_000)}
+    big_text = 'abc' * 10_000_000
+    start = time.perf_counter()
+    for value in (big_table, big_tree, big_text):
+        _preview_repr(value)
+    assert time.perf_counter() - start < 0.5
+
+
+def test_snapshot_preview_uses_bounded_preview():
+    namespace = {'big': [[i] * 10 for i in range(200_000)]}
+    [item] = _variable_snapshot_core(namespace)
+    assert item['preview'] == repr(namespace['big'])[:40]

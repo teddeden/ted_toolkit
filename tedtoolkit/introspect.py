@@ -16,6 +16,119 @@ from tedtoolkit.util import get_local_timestamp
 
 DYNAMIC_IMPORTS = {}
 
+# Container types _preview_repr() renders itself, with their repr() delimiters.
+_PREVIEW_DELIMITERS = {
+    dict: ('{', '}'),
+    list: ('[', ']'),
+    tuple: ('(', ')'),
+    set: ('{', '}'),
+    frozenset: ('{', '}'),
+}
+
+
+class _PreviewFull(Exception):
+    '''Raised internally by _PreviewWriter once the preview width is used up.'''
+
+
+class _PreviewWriter:
+    '''Accumulates preview text and stops the render (via _PreviewFull) as soon as
+    `width` characters have been produced.'''
+    def __init__(self, width):
+        self.parts = []
+        self.remaining = width
+
+    def write(self, text):
+        self.parts.append(text)
+        self.remaining -= len(text)
+        if self.remaining <= 0:
+            raise _PreviewFull
+
+
+def _preview_repr(value, width=40):
+    '''Return repr(value)[:width] WITHOUT building the full repr() first.
+
+    help_vars() (and the GUI Variables panel via _variable_snapshot_core()) only show a
+    40-character preview, but repr() of a large table/tree serialises the whole object
+    first - seconds per variable for big data. This renders dict/list/tuple/set/frozenset
+    (recursively) and str in iteration order, and stops as soon as `width` characters
+    exist, so the cost is proportional to the preview, not to the object.
+
+    For built-in types (and subclasses that keep the built-in __repr__) the result is
+    identical to repr(value)[:width]. Dict/list subclasses with their own __repr__
+    (defaultdict, Counter, ...) are approximated as "TypeName({...})"; other objects
+    fall back to their own repr().'''
+    if width <= 0:
+        return ''
+    writer = _PreviewWriter(width)
+    try:
+        _preview_emit(value, writer, set())
+    except _PreviewFull:
+        pass
+    return ''.join(writer.parts)[:width]
+
+
+def _preview_emit(value, writer, active):
+    '''Recursive worker for _preview_repr(); `active` holds the ids of the containers
+    currently being rendered, to reproduce repr()'s "[...]" for self-references.'''
+    cls = type(value)
+    if isinstance(value, str) and cls.__repr__ is str.__repr__:
+        writer.write(_preview_str(value, writer.remaining))
+        return
+    base = next((item for item in _PREVIEW_DELIMITERS if isinstance(value, item)), None)
+    if base is None or (base is tuple and cls.__repr__ is not tuple.__repr__):
+        writer.write(_preview_safe_repr(value))
+        return
+    open_char, close_char = _PREVIEW_DELIMITERS[base]
+    prefix = ''
+    if base in (set, frozenset):
+        # set.__repr__ itself prints "set()" when empty and "Name({...})" for frozenset/subclasses
+        if not value:
+            writer.write(f'{cls.__name__}()')
+            return
+        if cls is not set:
+            prefix = f'{cls.__name__}('
+    elif cls.__repr__ is not base.__repr__:
+        prefix = f'{cls.__name__}('
+    suffix = ')' if prefix else ''
+    if id(value) in active:
+        writer.write(f'{prefix}{open_char}...{close_char}{suffix}')
+        return
+    active.add(id(value))
+    writer.write(prefix + open_char)
+    for index, item in enumerate(value.items() if base is dict else value):
+        if index:
+            writer.write(', ')
+        if base is dict:
+            _preview_emit(item[0], writer, active)
+            writer.write(': ')
+            _preview_emit(item[1], writer, active)
+        else:
+            _preview_emit(item, writer, active)
+    if base is tuple and len(value) == 1:
+        writer.write(',')
+    writer.write(close_char + suffix)
+    active.discard(id(value))
+
+
+def _preview_str(text, width):
+    '''repr() of just the first `width` characters of text, using the quote style repr()
+    would choose for the WHOLE string (repr() picks double quotes only when the string
+    contains ' but no "). The appended sentinel quote forces the slice's repr() into the
+    same style; it lands beyond `width`, so it is always cut off again by the caller.'''
+    if len(text) <= width:
+        return repr(text)
+    sentinel = "'" if ("'" in text and '"' not in text) else '"'
+    return repr(text[:width] + sentinel)
+
+
+def _preview_safe_repr(value):
+    '''repr() that never raises - e.g. ints beyond sys.get_int_max_str_digits() raise
+    ValueError from repr() in Python 3.12.'''
+    try:
+        return repr(value)
+    except Exception:
+        return f'<{type(value).__name__}: preview unavailable>'
+
 
 def _variable_snapshot_core(namespace, exclude_globals=True):
     '''Pure, namespace-explicit counterpart to help_vars()'s variable-listing
@@ -36,7 +149,7 @@ def _variable_snapshot_core(namespace, exclude_globals=True):
             continue
         if exclude_globals and name.isupper():
             continue
-        result.append({'name': name, 'type': type(value).__name__, 'preview': repr(value)[:40]})
+        result.append({'name': name, 'type': type(value).__name__, 'preview': _preview_repr(value)})
     return result
 
 

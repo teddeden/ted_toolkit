@@ -21,7 +21,8 @@ own module docstring for why several functions (`help_all`, `help_vars`, `save_f
   fixed once already; don't reintroduce it.
 - Environment spec lives in `environment.yml`. Recreate with:
   `conda env remove -p <path>` then `conda env create -p <path> -f environment.yml`.
-- Add new dependencies to `environment.yml`, not just to the live environment.
+- Add new dependencies to BOTH `environment.yml` and `requirements.txt` (the pip/venv flow - see
+  GETTING_STARTED.md), not just to the live environment.
 
 ## Design conventions (established during the 2026 refactor — keep following these)
 

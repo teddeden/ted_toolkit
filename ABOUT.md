@@ -66,16 +66,24 @@ This means:
 
 ```
 toolkit/
-├── start_ted_toolkit.bat     launcher: activates conda env, runs `python -i ted_toolkit.py`
+├── start_ted_toolkit.bat     launcher: activates the env (local_env.cmd if present, else hardcoded conda), runs `python -i ted_toolkit.py`
 ├── environment.yml           conda environment spec (python=3.12, pinned - see CLAUDE.md)
+├── requirements.txt          pip equivalent of environment.yml (python.org 3.12 + venv flow) - keep both in sync
+├── setup_toolkit.bat/.ps1    guided env setup (conda or venv), writes git-ignored local_env.cmd - see GETTING_STARTED.md
+├── GETTING_STARTED.md        installation guide (both flows, launcher configuration, troubleshooting)
 ├── ted_toolkit.py            thin session launcher - see its own module docstring
 ├── tedtoolkit/                the actual package
 │   ├── history.py             readline history-rewrite primitives (input(), _add_kwarg_to_last_command, _check_assignment, ...)
 │   ├── validation.py          table-shape checks (_is_list_of_lists, _check_var_table)
 │   ├── prompts.py             console prompt primitives (ask_yn, ask_num, ask_select, ...) and the _kwarg_parse_prompt_* wrappers
-│   ├── util.py                elapsed(), timestamps, get_current_user, beep, set_window_title
-│   ├── clipboard.py           Windows clipboard I/O (win_copy/win_paste/*_table)
-│   ├── introspect.py          dynamic_import() and the function-reference helpers help_all()/save_function_reference() build on
+│   ├── util.py                elapsed(), timer_start()/timer_elapsed() benchmarking, timestamps, get_current_user, beep, set_window_title
+│   ├── clipboard.py           Windows clipboard I/O (win_copy/win_paste/*_table) + win_copy_pickle/win_paste_pickle
+│   │                           (any object <-> compressed pickled ASCII text, via clipboard or .txt file)
+│   ├── introspect.py          dynamic_import() and the function-reference helpers help_all()/save_function_reference() build on;
+│   │                           _preview_repr() (bounded repr preview used by help_vars() and the GUI Variables panel)
+│   ├── session.py             pure cores behind save_session()/restore_session() (CLI) and the GUI bridge's
+│   │                           rpc_save_session()/rpc_restore_session() - variable classification, pickling,
+│   │                           conflict detection; reads/writes toolkit_gui/session_bundle.py's .tedsession format
 │   ├── gui/
 │   │   ├── dialogs.py          tkinter file/folder picker dialogs (g_sel_file, g_sel_file_to_write, g_sel_folder, g_sel_files)
 │   │   ├── messagebox.py       tkinter messagebox wrappers (g_ask_yn, g_ask_okcancel, g_conditional_stop, g_show_*)
@@ -116,6 +124,23 @@ A separate top-level package, `toolkit_gui/`, contains an optional desktop GUI s
 of this — see "The desktop GUI shell" section below. It never modifies how `tedtoolkit`/
 `ted_toolkit.py` behave when run the plain command-line way.
 
+## Startup arguments / drag-and-drop (`_launch_from_args()`)
+
+`ted_toolkit.py`'s `__main__` block hands `sys.argv[1:]` (files dragged onto
+`start_ted_toolkit.bat` arrive this way through `%*`) to `_launch_from_args()`.
+`_classify_launch_arg()` decides what to do from the first argument:
+
+| First argument | Action |
+|---|---|
+| `.py` | `_run_script()` replay (the original behavior; `continue_execution()` unchanged) |
+| `.tedsession` | window title = file name, then `restore_session(file_path=...)` |
+| any other existing file, or a folder | no title prompt; window title = file name(s); `data = data_import(file_path=...)` (`data_1`, `data_2`, ... for several), each run through `_exec_launch_command()` |
+| missing path | message, then the normal interactive start (title prompt) |
+
+`_exec_launch_command()` is the same add-to-history-then-`exec()` sequence `_run_script()` uses,
+so any prompts the import raises (sheet, csv/txt, csv options) get baked into that history
+line. Arguments of a different kind from the first one are ignored with a warning.
+
 ## Why `help_all()`/`help_vars()`/`_run_script()` live in `ted_toolkit.py`, not the package
 
 These functions call bare `globals()`/`eval(name)` against **whatever module is running as
@@ -130,7 +155,18 @@ up" by moving them into the package.
 `data_import()`/`data_export()` in `tedtoolkit/io/dispatch.py` are the blessed entry points —
 they auto-detect xlsx/csv/txt/xml/xml_archive (import) or xlsx/csv/txt (export) from the file
 extension (prompting if ambiguous), support Excel sheet selection, and are fully scriptable via
-kwargs with GUI-prompt fallback when kwargs are missing. `xlsx_import`/`xlsx_export`/
+kwargs with GUI-prompt fallback when kwargs are missing.
+
+`data_import()` also sniffs the *content* of `.txt` and unknown-extension files with
+`_sniff_delimited()`. This uses `csv.Sniffer` over `, ; \t |`, and accepts the result only if
+the first ~20 lines split into a consistent number of fields, at least 2. If the file looks
+delimited, `data_import()` offers csv vs plain text with csv pre-selected. It then passes the
+detected delimiter to `csv_import()` as the default for its delim prompt, via the internal
+`_delim_default` kwarg. The answer is baked into history as `process_as=`. Sniffing is skipped
+while `_run_script()` is replaying: it sets `tedtoolkit.history.REPLAY_ACTIVE`, so a script
+line saved *before* this feature (`data_import(file_path='x.txt')`, no `process_as`) still
+reads the file as plain text with no new prompt. `.csv`/`.xlsx`/`.xml`/archives and explicit
+`process_as=` kwargs are never sniffed. `xlsx_import`/`xlsx_export`/
 `csv_import`/`csv_export`/`xml_import`/`xml_archive_import` remain public (not just internal
 helpers) since existing saved scripts may call them directly for their non-prompting return
 shapes. **Zip/password-protected CSV import was deliberately dropped** during the 2026 refactor
@@ -291,7 +327,8 @@ widget drawn on top of it, not a reimplementation of one.
 Since each tab is a separate OS process, the GUI can't just call Python functions inside a
 session to inspect its variables — it needs an IPC channel into that specific process. This is
 what `tedtoolkit/gui_bridge.py` is for: a background thread, started by `maybe_start_bridge()`,
-which is called from `ted_toolkit.py` right after `ARGS = sys.argv[1:]` and does **nothing at all**
+which is called from `ted_toolkit.py` right after `ARGS = sys.argv[1:]` (imported there under the
+private alias `_maybe_start_bridge`, so it stays out of `help_all()`) and does **nothing at all**
 unless the GUI has set `TEDTOOLKIT_GUI_BRIDGE_PORT` before spawning the process —
 `start_ted_toolkit.bat` never sets this, so plain command-line usage is unaffected. When active,
 it opens a localhost TCP socket and answers newline-delimited JSON requests
@@ -302,29 +339,51 @@ the codebase:
 - `tedtoolkit/introspect.py::_variable_snapshot_core()` — the same type-filter logic
   `help_vars()` already has inline, but taking an explicit namespace dict instead of `eval()`-ing
   against `globals()`, so it's safe to call from a different module. Used for the live Variables
-  panel.
+  panel. Its 40-character previews (like `help_vars()`'s) come from `_preview_repr()`, which
+  renders only the visible prefix of a value instead of `repr()`-ing the whole object and
+  slicing — important because this panel is polled every second, and a full `repr()` of a large
+  table or tree takes seconds. The output is identical to `repr(value)[:40]` for built-in types.
 - `tedtoolkit/tables/snapshot.py::_table_snapshot_core()` — a new, bounded (default 250×250)
   structured table slice, used for the Data Preview panel's truncated grid.
 
 `help_vars()`/`help_all()` themselves are untouched — the extraction happened *underneath* them,
 not by rewiring them.
 
-### Save/Restore Session
+### Save/Restore Session (GUI menu and CLI `save_session()`/`restore_session()`)
 
-Menu-only, and deliberately **not** part of the plain CLI surface: `rpc_save_session()`/
-`rpc_restore_session()` live only in `gui_bridge.py` and are never imported into `ted_toolkit.py`,
-so they're structurally invisible to `help_all()`'s listing (short of a user deliberately
-importing the bridge module themselves at the prompt — an inherent, unavoidable property of a
-real Python REPL, consistent with this codebase's existing eval/exec stance).
+There are two entry points over **one shared core and one file format**:
+- **CLI**: `save_session()`/`restore_session()` are thin wrappers in `ted_toolkit.py`. They live
+  there because they need the session's own `globals()`, for the same reason `help_vars()` does.
+  Both drop their own call line from readline history, so they never appear in saved or restored
+  history. Restore lists any variables that the file would overwrite and asks whether to abort
+  or overwrite (or follows `on_conflict='abort'|'overwrite'`). It then *appends* a
+  `# --- restored session from ... ---` marker plus the saved history to the current history,
+  and injects the variables. Prior history is kept, and nothing is executed.
+- **GUI menu**: `rpc_save_session()`/`rpc_restore_session()` in `gui_bridge.py` are bridge RPC
+  handlers and are never imported into `ted_toolkit.py` (restore spawns a fresh tab, described
+  below).
+
+The pure logic lives in `tedtoolkit/session.py`: `_classify_session_variables()`,
+`_pickle_variables()`, `_save_session_core()`, `_load_session_core()`,
+`_find_restore_conflicts()` and `_restore_session_core()`. Variable filtering is per variable and
+denylist-based, not `help_vars()`'s blanket ALL-CAPS display filter, so a user's own ALL-CAPS
+variable is never silently dropped. It also uses `_SESSION_BASELINE`, a `dict(globals())`
+snapshot taken at the end of `ted_toolkit.py`'s load. A name still bound to the *same object* it
+had at load time is toolkit-provided (`ALL_SHEETS_TEXT`, `SESSION_FILETYPES`, ...) and is neither
+saved nor reported as a restore conflict; a name the user rebound is user data.
 
 A saved `.tedsession` file is a zip (not one `pickle.dumps()` of everything, so a corrupt member
 can never poison the rest): `manifest.json`, `transcript.txt` (GUI-side, from the tab's `pyte`
-scrollback), `history.json`/`history.py` (the bridge's readline history, canonical + human-
-readable), and `variables.pkl` (the bridge's pickled working variables — a per-variable
-denylist-based filter, not `help_vars()`'s ALL-CAPS-blanket-exclusion display filter, so a user's
-own ALL-CAPS variable is never silently dropped from a save).
+scrollback; empty for CLI saves), `history.json`/`history.py` (the session's readline history,
+canonical + human-readable), and `variables.pkl` (the pickled working variables). The
+reader/writer is `toolkit_gui/session_bundle.py` (pure json+zipfile). `tedtoolkit/session.py`
+imports it lazily, only when a bundle is actually read or written. The dependency deliberately
+points this way: the GUI process never imports the `tedtoolkit` package (see
+`toolkit_gui/config.py`), and the CLI never needs PySide6. Either side can restore the other's
+files. Not saved: screen output (CLI), functions defined at the prompt, and `dynamic_import()`
+modules, which are reported as unpicklable; re-run the `dynamic_import()` line after a restore.
 
-Restore **never replays or `exec()`s a single history line** — it spawns a brand-new blank tab,
+GUI restore **never replays or `exec()`s a single history line** — it spawns a brand-new blank tab,
 waits for that fresh session's own unconditional startup `os.system('cls')` + title prompt to
 fully settle (auto-answering it with a blank Enter, exactly like a user pressing Enter there),
 *then* seeds the old transcript into the tab's terminal display and sends the saved
@@ -344,7 +403,8 @@ out what the automated suite structurally cannot exercise:
 - tkinter file/folder dialogs and messagebox popups (`g_sel_file*`, `g_ask_*`, `g_show_*`) —
   these are one-line wrappers around blocking native dialogs; not unit tested by design.
 - Excel COM automation (`view_in_excel=True` opening a real Excel window via `win32com`).
-- Windows clipboard I/O (`win_copy`/`win_paste`/`*_table`).
+- Windows clipboard I/O (`win_copy`/`win_paste`/`*_table`, and the clipboard path of
+  `win_copy_pickle`/`win_paste_pickle` - their text format and file path are unit tested).
 - `g_show_image_gallery()` (`tedtoolkit/gui/image_viewer.py`) - the resizable QR-code preview
   window `qr_encode()` opens for `output_type='gui'` (real Tk window, live resize/rescale, Prev/
   Next button and arrow-key interaction). `qr_encode()`'s wrapper-level tests monkeypatch this

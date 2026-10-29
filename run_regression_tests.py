@@ -35,7 +35,8 @@ KNOWN_UNTESTABLE = [
     ('Excel COM automation (view_in_excel=True opening a real Excel window)',
      'Requires a real Excel installation and a visible desktop session; not exercised by '
      'the automated suite.'),
-    ('Windows clipboard I/O (win_copy / win_paste / win_copy_table / win_paste_table)',
+    ('Windows clipboard I/O (win_copy / win_paste / win_copy_table / win_paste_table, and the '
+     'clipboard path of win_copy_pickle / win_paste_pickle)',
      'Requires a real Windows clipboard and, for paste, pre-populated clipboard content.'),
     ('data_recon() col_select=\'LIST\' with no columns kwarg, or col_mode=\'NAME\'',
      'Known gap, not a test-coverage gap: calls _sel_compare_cols()/_check_convert_text_cols(), '
@@ -64,6 +65,20 @@ KNOWN_UNTESTABLE = [
      'Depends on real psutil.Process CPU sampling against live spawned processes over multiple '
      'poll ticks; verified manually by running a CPU-heavy command and watching the tab dot and '
      'status bar respond.'),
+    ('Real Explorer drag-and-drop onto start_ted_toolkit.bat',
+     '_launch_from_args() dispatch (.py / .tedsession / data files) is unit tested, but the '
+     'Explorer drop gesture and the resulting console session are not. Verify by hand: drop an '
+     '.xlsx, a delimited .txt, two .csv files, a .tedsession and a .py onto the launcher.'),
+    ('setup_toolkit.bat / setup_toolkit.ps1 (environment creation, local_env.cmd)',
+     'Creates real conda/venv environments and downloads packages. Verify by hand: run '
+     'setup_toolkit.bat on a clean machine (both flows), then confirm start_ted_toolkit.bat '
+     'and regression_test.bat pick up the generated local_env.cmd.'),
+    ('save_session() / restore_session() file dialogs and the CLI conflict prompt in a real '
+     'console',
+     'The save/restore logic, history handling and conflict detection are unit tested; the '
+     'g_sel_file*/ask_select interaction and up-arrow recall of restored history need a real '
+     'console. Verify by hand: save_session(), restore into a new window with a conflicting '
+     'variable, try abort and overwrite, press Up.'),
 ]
 
 

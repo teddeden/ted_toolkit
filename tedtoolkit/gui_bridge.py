@@ -13,7 +13,9 @@ requests, giving the GUI (a separate process/interpreter) structured access
 to this session's live variables/tables and to two menu-only capabilities
 (save_session / restore_session) that are deliberately NEVER imported into
 ted_toolkit.py, so they are structurally invisible to help_all()'s listing
-and to plain interactive typing.
+and to plain interactive typing. (The CLI has its own save_session()/
+restore_session() wrappers in ted_toolkit.py; both share tedtoolkit/session.py's
+cores and the same .tedsession file format.)
 
 Restoring a session never replays/exec()s history - it only re-adds lines to
 the readline history buffer (exactly the same readline.add_history() call
@@ -24,7 +26,6 @@ with zero recomputation.
 
 import base64
 import ctypes
-import inspect
 import json
 import os
 import pickle
@@ -33,19 +34,13 @@ import socket
 import threading
 
 from tedtoolkit.introspect import _variable_snapshot_core
+# Variable classification/pickling is shared with the CLI's save_session()/restore_session();
+# SESSION_INTERNAL_DENYLIST is re-exported here for existing importers.
+from tedtoolkit.session import (SESSION_INTERNAL_DENYLIST, _classify_session_variables,  # pylint: disable=unused-import
+                                _pickle_variables, _collect_history_lines)
 from tedtoolkit.tables.preview import _prev_s
 from tedtoolkit.tables.snapshot import _table_snapshot_core
 from tedtoolkit.validation import _is_list_of_lists
-
-# Known toolkit-internal globals that are never "working variables" a user
-# would expect back after restoring a session. Deliberately NOT an ALL-CAPS
-# blanket exclusion (unlike help_vars()'s display filter) - that would risk
-# silently dropping a user's own all-caps variable from a save.
-SESSION_INTERNAL_DENYLIST = {
-    'VERSION', 'FUNCTION_CATEGORIES', 'ARGS', 'LAST_LINE_ATTEMPTED',
-    'DYNAMIC_IMPORTS', 'SCRIPT_RUNNING',
-}
-
 
 def maybe_start_bridge(session_globals):
     '''Start the GUI bridge's background thread iff the GUI set
@@ -156,49 +151,6 @@ def _get_console_title():
     return buf.value
 
 
-def _classify_session_variables(namespace):
-    '''Pure function: given a globals()-like dict, return the sorted list of
-    names that save_session() should attempt to pickle. Excludes dunders,
-    known toolkit internals (SESSION_INTERNAL_DENYLIST), and anything that
-    is a function/module/class rather than data.'''
-    result = []
-    for name, value in namespace.items():
-        if name.startswith('_'):
-            continue
-        if name in SESSION_INTERNAL_DENYLIST:
-            continue
-        if inspect.isfunction(value) or inspect.ismodule(value) or inspect.isclass(value):
-            continue
-        result.append(name)
-    return sorted(result)
-
-
-def _pickle_variables(namespace, names):
-    '''Try pickling each named variable individually so one unpicklable
-    object (e.g. a live dynamic_import() module) can't abort the whole save.
-    Returns (pickled_bytes, succeeded, failed) where failed is a list of
-    {'name', 'type', 'reason'} dicts.'''
-    succeeded = []
-    failed = []
-    values = {}
-    for name in names:
-        value = namespace[name]
-        try:
-            pickle.dumps(value)
-        except Exception as exc:
-            failed.append({'name': name, 'type': type(value).__name__, 'reason': str(exc)})
-            continue
-        values[name] = value
-        succeeded.append(name)
-    return pickle.dumps(values), succeeded, failed
-
-
-def _collect_history_lines():
-    '''Same source loop save_history() (ted_toolkit.py) uses: every entry
-    currently in the process readline history buffer, in order.'''
-    return [readline.get_history_item(index) for index in range(1, readline.get_current_history_length() + 1)]
-
-
 def rpc_save_session(session_globals):
     '''Bridge RPC handler for the GUI's "Save Session" menu action. Returns
     everything the GUI needs EXCEPT the transcript (which the GUI already
@@ -206,7 +158,7 @@ def rpc_save_session(session_globals):
     .tedsession bundle: history lines, and pickled working variables.'''
     if session_globals.get('SCRIPT_RUNNING', False):
         return {'ok': False, 'error': 'script_running'}
-    names = _classify_session_variables(session_globals)
+    names = _classify_session_variables(session_globals, session_globals.get('_SESSION_BASELINE'))
     pickled_bytes, succeeded, failed = _pickle_variables(session_globals, names)
     return {
         'ok': True,

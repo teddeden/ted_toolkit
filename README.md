@@ -51,14 +51,15 @@ every guided function follows, known gaps, and the do-not-touch list), see [ABOU
 
 ## Setup
 
+See **[GETTING_STARTED.md](GETTING_STARTED.md)** for full instructions, covering conda
+(`environment.yml`) and standard python.org Python + pip (`requirements.txt`). The quickest
+route is to double-click `setup_toolkit.bat`. It creates the environment and writes a git-ignored
+`local_env.cmd`, which `start_ted_toolkit.bat` and `regression_test.bat` use to activate it.
+Without that file, the launchers fall back to the original hardcoded conda paths.
+
 ```
 conda env create -n toolkit-env -f environment.yml
 ```
-
-`start_ted_toolkit.bat` currently hardcodes this machine's conda install path, environment path,
-and toolkit checkout path. If you're setting this up on a different machine, edit the three paths
-in `start_ted_toolkit.bat` to match your own conda installation, environment location, and where
-you cloned this repo.
 
 ## Running it
 
@@ -71,6 +72,15 @@ To replay a previously saved script with no prompts:
 ```
 start_ted_toolkit.bat path\to\saved_script.py
 ```
+
+You can also **drag a file onto `start_ted_toolkit.bat`** (or pass it as the argument). What
+happens depends on the file type:
+
+| Dropped file | What happens |
+|---|---|
+| `.py` (from `save_history()`) | replayed, as above |
+| `.tedsession` (from `save_session()`) | restored: variables and history come back, nothing re-runs |
+| anything else (`.xlsx`, `.csv`, `.txt`, `.xml`, `.tar.gz`, a folder, ...) | the title prompt is skipped and `data = data_import(file_path=...)` runs straight away (`data_1`, `data_2`, ... for several files) |
 
 ## Getting contextual help
 

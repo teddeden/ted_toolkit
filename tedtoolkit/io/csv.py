@@ -19,8 +19,11 @@ def _parse_csv_args(case, **kwargs):
     kwargs may include the internal-use-only '_caller_fn_name', set by data_import()/
     data_export() so any prompted-for values get baked into history against the name the
     user actually typed, rather than against 'csv_import'/'csv_export' (which never
-    appears in history when csv is reached via the data_import()/data_export() dispatcher)'''
+    appears in history when csv is reached via the data_import()/data_export() dispatcher)
+    and the internal-use-only '_delim_default', set by data_import() to the delimiter it
+    detected in a non-.csv text file, so the delim prompt offers that instead of ',' '''
     fn_name = kwargs.pop('_caller_fn_name', 'csv_import' if case == 'import' else 'csv_export')
+    delim_default = kwargs.pop('_delim_default', ',')
     file_path = kwargs.get('file_path', None)
     if file_path is None and case == 'import':
         file_path = g_sel_file(title='Import CSV data',
@@ -31,7 +34,7 @@ def _parse_csv_args(case, **kwargs):
             filetypes=[('CSV files', ('*.csv')),
                        ('Text files', ('*.txt', '*.text'))])
     if 'delim' not in kwargs:
-        delim = _prompt_for_any_arg('delim', ',', fn_name=fn_name)
+        delim = _prompt_for_any_arg('delim', delim_default, fn_name=fn_name)
     else:
         delim = kwargs['delim']
     if 'quoting' not in kwargs:

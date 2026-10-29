@@ -215,3 +215,125 @@ def test_data_import_csv_route_bakes_prompted_kwargs_onto_data_import_line(monke
     assert 'csv_import(' not in rewritten
     assert 'delim=' in rewritten
     assert 'encoding=' in rewritten
+
+
+# --- delimited-text detection for non-.csv files (_sniff_delimited + data_import) -----
+
+import pytest
+
+from tedtoolkit import history as history_module
+from tedtoolkit.io import dispatch as dispatch_module
+from tedtoolkit.io.dispatch import _sniff_delimited
+
+
+def _write(tmp_path, name, text):
+    path = tmp_path / name
+    path.write_text(text, encoding='utf-8', newline='')
+    return str(path)
+
+
+@pytest.mark.parametrize('delim', [',', '\t', ';', '|'])
+def test_sniff_detects_common_delimiters(tmp_path, delim):
+    rows = [['id', 'name', 'amount']] + [[str(i), f'n{i}', str(i * 1.5)] for i in range(10)]
+    path = _write(tmp_path, 'd.txt', '\n'.join(delim.join(row) for row in rows) + '\n')
+    assert _sniff_delimited(path) == (delim, 3)
+
+
+def test_sniff_handles_quoted_fields(tmp_path):
+    path = _write(tmp_path, 'q.txt', 'id,comment\n1,"hello, world"\n2,"a, b, c"\n3,plain\n')
+    assert _sniff_delimited(path) == (',', 2)
+
+
+@pytest.mark.parametrize('text', [
+    'This is a normal text file.\nIt has sentences, and the odd comma.\nNothing tabular here at all\n',
+    'one\ntwo\nthree\nfour\n',
+    'a,b,c\nd\ne,f\ng,h,i,j,k\nl\n',
+    '',
+    'single,line,only\n',
+])
+def test_sniff_rejects_non_tabular_text(tmp_path, text):
+    assert _sniff_delimited(_write(tmp_path, 'p.txt', text)) is None
+
+
+def test_sniff_rejects_binary(tmp_path):
+    path = tmp_path / 'b.dat'
+    path.write_bytes(b'\x00\x01\x02,\x03\n' * 50)
+    assert _sniff_delimited(str(path)) is None
+
+
+def test_sniff_rejects_missing_file(tmp_path):
+    assert _sniff_delimited(str(tmp_path / 'nope.txt')) is None
+
+
+@pytest.fixture
+def recorded_yn(monkeypatch):
+    '''Answer every ask_yn() with its default-accepting "yes" and record the prompts.'''
+    prompts = []
+    monkeypatch.setattr(prompts_module, 'ask_yn', lambda default='no', prompt='': prompts.append(prompt) or True)
+    return prompts
+
+
+def test_delimited_txt_offers_csv_with_detected_delimiter(tmp_path, seed_history, recorded_yn, capsys):
+    path = _write(tmp_path, 'tab.txt', 'id\tname\n1\ta\n2\tb\n')
+    seed_history(f'data = data_import(file_path={path!r})')
+    result = data_import(file_path=path)
+    assert result == [['id', 'name'], ['1', 'a'], ['2', 'b']]
+    assert r"looks like delimited data (delimiter '\t', 2 columns)" in capsys.readouterr().out
+    assert recorded_yn[0] == 'The argument <process_as> is set to <csv>. Is this ok?'
+    assert r"The argument <delim> is set to <'\t'>. Is this ok?" in recorded_yn
+    rewritten = readline.get_history_item(1)
+    assert "process_as='csv'" in rewritten and r"delim='\t'" in rewritten
+
+
+def test_delimited_txt_can_still_be_read_as_plain_text(tmp_path, seed_history, monkeypatch):
+    path = _write(tmp_path, 'tab.txt', 'id\tname\n1\ta\n')
+    monkeypatch.setattr(prompts_module, 'ask_yn', lambda *a, **k: False)   # "not ok" -> choose
+    monkeypatch.setattr(prompts_module, 'input', lambda prompt: '1')      # index 1 = 'txt'
+    seed_history(f'data = data_import(file_path={path!r})')
+    result = data_import(file_path=path)
+    assert [line.rstrip('\r\n') for line in result] == ['id\tname', '1\ta']
+    assert "process_as='txt'" in readline.get_history_item(1)
+
+
+def test_no_sniff_prompt_for_plain_text_or_explicit_process_as_or_csv(tmp_path, monkeypatch):
+    monkeypatch.setattr(prompts_module, 'ask_yn', lambda *a, **k: pytest.fail('unexpected prompt'))
+    prose = _write(tmp_path, 'notes.txt', 'just some notes\nmore notes\n')
+    assert [line.rstrip('\r\n') for line in data_import(file_path=prose)] == ['just some notes', 'more notes']
+    tabular = _write(tmp_path, 'tab.txt', 'a\tb\n1\t2\n')
+    assert len(data_import(file_path=tabular, process_as='txt')) == 2
+    semicolon_csv = _write(tmp_path, 'x.csv', 'a;b\n1;2\n')
+    assert data_import(file_path=semicolon_csv, delim=';', quote_mark='"', quoting='QUOTE_MINIMAL',
+                       encoding='utf_8', line_terminator='\n', convert_numbers=False,
+                       convert_dates=False, date_format=None) == [['a', 'b'], ['1', '2']]
+
+
+def test_no_sniff_prompt_while_replaying_a_saved_script(tmp_path, monkeypatch):
+    '''Old saved scripts' data_import(file_path='x.txt') lines (no process_as) must keep reading
+    the file as plain text with no new prompt.'''
+    monkeypatch.setattr(prompts_module, 'ask_yn', lambda *a, **k: pytest.fail('unexpected prompt'))
+    monkeypatch.setattr(history_module, 'REPLAY_ACTIVE', True)
+    path = _write(tmp_path, 'tab.txt', 'a\tb\n1\t2\n')
+    assert [line.rstrip('\r\n') for line in data_import(file_path=path)] == ['a\tb', '1\t2']
+
+
+def test_unknown_extension_defaults_ambiguous_picker_to_csv_when_delimited(tmp_path, monkeypatch, seed_history):
+    seen = []
+
+    def _fake_select(var_in, prompt='', orig_out=False, default_val=None, **kwargs):
+        seen.append(default_val)
+        return 'txt'
+    monkeypatch.setattr(dispatch_module, 'ask_select', _fake_select)
+    delimited = _write(tmp_path, 'export.tsv', 'a\tb\n1\t2\n')
+    seed_history(f'd = data_import(file_path={delimited!r})')
+    data_import(file_path=delimited)
+    prose = _write(tmp_path, 'readme.log', 'hello\nworld\n')
+    seed_history(f'd = data_import(file_path={prose!r})')
+    data_import(file_path=prose)
+    assert seen == ['csv', None]
+
+
+def test_plain_csv_import_keeps_comma_default(tmp_path, seed_history, recorded_yn):
+    path = _write(tmp_path, 'in.csv', 'a\tb\n1\t2\n')
+    seed_history(f'd = data_import(file_path={path!r})')
+    data_import(file_path=path)
+    assert "The argument <delim> is set to <','>. Is this ok?" in recorded_yn
